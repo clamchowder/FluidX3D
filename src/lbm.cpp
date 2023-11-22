@@ -192,12 +192,12 @@ void LBM_Domain::enqueue_surface_3() {
 }
 #endif // SURFACE
 #ifdef FORCE_FIELD
-void LBM_Domain::enqueue_calculate_force_on_boundaries() { // calculate forces from fluid on TYPE_S nodes
+void LBM_Domain::enqueue_calculate_force_on_boundaries() { // calculate forces from fluid on TYPE_S cells
 	kernel_calculate_force_on_boundaries.set_parameters(2u, t).enqueue_run();
 }
 #endif // FORCE_FIELD
 #ifdef MOVING_BOUNDARIES
-void LBM_Domain::enqueue_update_moving_boundaries() { // mark/unmark nodes next to TYPE_S nodes with velocity!=0 with TYPE_MS
+void LBM_Domain::enqueue_update_moving_boundaries() { // mark/unmark cells next to TYPE_S cells with velocity!=0 with TYPE_MS
 	kernel_update_moving_boundaries.enqueue_run();
 }
 #endif // MOVING_BOUNDARIES
@@ -350,7 +350,7 @@ string LBM_Domain::device_defines() const { return
 	"\n	#define TYPE_X 0x40" // 0b01000000 // reserved type X
 	"\n	#define TYPE_Y 0x80" // 0b10000000 // reserved type Y
 
-	"\n	#define TYPE_MS 0x03" // 0b00000011 // node next to moving solid boundary
+	"\n	#define TYPE_MS 0x03" // 0b00000011 // cell next to moving solid boundary
 	"\n	#define TYPE_BO 0x03" // 0b00000011 // any flag bit used for boundaries (temperature excluded)
 	"\n	#define TYPE_IF 0x18" // 0b00011000 // change from interface to fluid
 	"\n	#define TYPE_IG 0x30" // 0b00110000 // change from interface to gas
@@ -464,10 +464,10 @@ bool LBM_Domain::Graphics::update_camera() {
 	}
 	return change; // return false if camera parameters remain unchanged
 }
-bool LBM_Domain::Graphics::enqueue_draw_frame(const int visualization_modes, const int slice_mode, const int slice_x, const int slice_y, const int slice_z) {
+bool LBM_Domain::Graphics::enqueue_draw_frame(const int visualization_modes, const int slice_mode, const int slice_x, const int slice_y, const int slice_z, const bool visualization_change) {
 	const bool camera_update = update_camera();
 #if defined(INTERACTIVE_GRAPHICS)||defined(INTERACTIVE_GRAPHICS_ASCII)
-	if(!camera_update&&!camera.key_update&&lbm->get_t()==t_last_rendered_frame) return false; // don't render a new frame if the scene hasn't changed since last frame
+	if(!visualization_change&&!camera_update&&!camera.key_update&&lbm->get_t()==t_last_rendered_frame) return false; // don't render a new frame if the scene hasn't changed since last frame
 #endif // INTERACTIVE_GRAPHICS||INTERACTIVE_GRAPHICS_ASCII
 	t_last_rendered_frame = lbm->get_t();
 	camera.key_update = false;
@@ -540,10 +540,6 @@ string LBM_Domain::Graphics::device_defines() const { return
 #endif // GRAPHICS
 
 
-
-//{ thread* threads=new thread[N]; for(uint n=0u; n<N; n++) threads[n]=thread([=]() { ... }); for(uint n=0u; n<N; n++) threads[n].join(); delete[] threads; }
-//#include <ppl.h> // concurrency::parallel_for(0, N, [&](int n) { ... });
-//#include <omp.h> // #pragma omp parallel for \n for(int n=0; n<N; i++) { ... } // #pragma warning(disable:6993)
 
 vector<Device_Info> smart_device_selection(const uint D) {
 	const vector<Device_Info>& devices = get_devices(); // a vector of all available OpenCL devices
@@ -621,10 +617,10 @@ LBM::LBM(const uint Nx, const uint Ny, const uint Nz, const uint Dx, const uint 
 	const vector<Device_Info>& device_infos = smart_device_selection(D);
 	sanity_checks_constructor(device_infos, this->Nx, this->Ny, this->Nz, Dx, Dy, Dz, nu, fx, fy, fz, sigma, alpha, beta, particles_N, particles_rho);
 	lbm = new LBM_Domain*[D];
-	for(uint d=0u; d<D; d++) { // { thread* threads=new thread[D]; for(uint d=0u; d<D; d++) threads[d]=thread([=]() {
+	for(uint d=0u; d<D; d++) { // parallel_for((ulong)D, D, [&](ulong d) {
 		const uint x=((uint)d%(Dx*Dy))%Dx, y=((uint)d%(Dx*Dy))/Dx, z=(uint)d/(Dx*Dy); // d = x+(y+z*Dy)*Dx
 		lbm[d] = new LBM_Domain(device_infos[d], this->Nx/Dx+2u*Hx, this->Ny/Dy+2u*Hy, this->Nz/Dz+2u*Hz, Dx, Dy, Dz, (int)(x*this->Nx/Dx)-(int)Hx, (int)(y*this->Ny/Dy)-(int)Hy, (int)(z*this->Nz/Dz)-(int)Hz, nu, fx, fy, fz, sigma, alpha, beta, particles_N, particles_rho);
-	} // }); for(uint d=0u; d<D; d++) threads[d].join(); delete[] threads; }
+	} // });
 	{
 		Memory<float>** buffers_rho = new Memory<float>*[D];
 		for(uint d=0u; d<D; d++) buffers_rho[d] = &(lbm[d]->rho);
@@ -731,38 +727,50 @@ void LBM::sanity_checks_constructor(const vector<Device_Info>& device_infos, con
 }
 
 void LBM::sanity_checks_initialization() { // sanity checks during initialization on used extensions based on used flags
+	uchar flags_used = 0u;
 	bool moving_boundaries_used=false, equilibrium_boundaries_used=false, surface_used=false, temperature_used=false; // identify used extensions based used flags
-	for(ulong n=0ull; n<get_N(); n++) {
+	const uint threads = thread::hardware_concurrency();
+	vector<uchar> t_flags_used(threads, 0u);
+	vector<bool> t_moving_boundaries_used(threads, false);
+	vector<bool> t_equilibrium_boundaries_used(threads, false);
+	parallel_for(get_N(), threads, [&](ulong n, uint t) {
 		const uchar flagsn = flags[n];
 		const uchar flagsn_bo = flagsn&(TYPE_S|TYPE_E);
-		const uchar flagsn_su = flagsn&(TYPE_F|TYPE_I|TYPE_G);
-		moving_boundaries_used = moving_boundaries_used || (((flagsn_bo==TYPE_S)&&(u.x[n]!=0.0f||u.y[n]!=0.0f||u.z[n]!=0.0f))||(flagsn_bo==(TYPE_S|TYPE_E)));
-		equilibrium_boundaries_used = equilibrium_boundaries_used || (flagsn_bo==TYPE_E);
-		surface_used = surface_used || flagsn_su;
-		temperature_used = temperature_used || (flagsn&TYPE_T);
+		t_flags_used[t] = t_flags_used[t]|flagsn;
+		if(flagsn_bo&TYPE_S) t_moving_boundaries_used[t] = t_moving_boundaries_used[t] || (((flagsn_bo==TYPE_S)&&(u.x[n]!=0.0f||u.y[n]!=0.0f||u.z[n]!=0.0f))||(flagsn_bo==(TYPE_S|TYPE_E)));
+		t_equilibrium_boundaries_used[t] = t_equilibrium_boundaries_used[t] || flagsn_bo==TYPE_E;
+	});
+	for(uint t=0u; t<threads; t++) {
+		flags_used = flags_used|t_flags_used[t];
+		moving_boundaries_used = moving_boundaries_used || t_moving_boundaries_used[t];
+		equilibrium_boundaries_used = equilibrium_boundaries_used || t_equilibrium_boundaries_used[t];
 	}
+	surface_used = (bool)(flags_used&(TYPE_F|TYPE_I|TYPE_G));
+	temperature_used = (bool)(flags_used&TYPE_T);
 #ifndef MOVING_BOUNDARIES
-	if(moving_boundaries_used) print_warning("Some boundary nodes have non-zero velocity, but MOVING_BOUNDARIES is not enabled. If you intend to use moving boundaries, uncomment \"#define MOVING_BOUNDARIES\" in defines.hpp.");
+	if(moving_boundaries_used) print_warning("Some boundary cells have non-zero velocity, but MOVING_BOUNDARIES is not enabled. If you intend to use moving boundaries, uncomment \"#define MOVING_BOUNDARIES\" in defines.hpp.");
 #else // MOVING_BOUNDARIES
-	if(!moving_boundaries_used) print_warning("The MOVING_BOUNDARIES extension is enabled but no moving boundary nodes (TYPE_S flag and velocity unequal to zero) are placed in the simulation box. You may disable the extension by commenting out \"#define MOVING_BOUNDARIES\" in defines.hpp.");
+	if(!moving_boundaries_used) print_warning("The MOVING_BOUNDARIES extension is enabled but no moving boundary cells (TYPE_S flag and velocity unequal to zero) are placed in the simulation box. You may disable the extension by commenting out \"#define MOVING_BOUNDARIES\" in defines.hpp.");
 #endif // MOVING_BOUNDARIES
 #ifndef EQUILIBRIUM_BOUNDARIES
-	if(equilibrium_boundaries_used) print_error("Some nodes are set as equilibrium boundaries with the TYPE_E flag, but EQUILIBRIUM_BOUNDARIES is not enabled. Uncomment \"#define EQUILIBRIUM_BOUNDARIES\" in defines.hpp.");
+	if(equilibrium_boundaries_used) print_error("Some cells are set as equilibrium boundaries with the TYPE_E flag, but EQUILIBRIUM_BOUNDARIES is not enabled. Uncomment \"#define EQUILIBRIUM_BOUNDARIES\" in defines.hpp.");
 #else // EQUILIBRIUM_BOUNDARIES
-	if(!equilibrium_boundaries_used) print_warning("The EQUILIBRIUM_BOUNDARIES extension is enabled but no equilibrium boundary nodes (TYPE_E flag) are placed in the simulation box. You may disable the extension by commenting out \"#define EQUILIBRIUM_BOUNDARIES\" in defines.hpp.");
+	if(!equilibrium_boundaries_used) print_warning("The EQUILIBRIUM_BOUNDARIES extension is enabled but no equilibrium boundary cells (TYPE_E flag) are placed in the simulation box. You may disable the extension by commenting out \"#define EQUILIBRIUM_BOUNDARIES\" in defines.hpp.");
 #endif // EQUILIBRIUM_BOUNDARIES
 #ifndef SURFACE
-	if(surface_used) print_error("Some nodes are set as fluid/interface/gas with the TYPE_F/TYPE_I/TYPE_G flags, but SURFACE is not enabled. Uncomment \"#define SURFACE\" in defines.hpp.");
+	if(surface_used) print_error("Some cells are set as fluid/interface/gas with the TYPE_F/TYPE_I/TYPE_G flags, but SURFACE is not enabled. Uncomment \"#define SURFACE\" in defines.hpp.");
 #else // SURFACE
-	if(!surface_used) print_error("The SURFACE extension is enabled but no fluid/interface/gas nodes (TYPE_F/TYPE_I/TYPE_G flags) are placed in the simulation box. Disable the extension by commenting out \"#define SURFACE\" in defines.hpp.");
+	if(!surface_used) print_error("The SURFACE extension is enabled but no fluid/interface/gas cells (TYPE_F/TYPE_I/TYPE_G flags) are placed in the simulation box. Disable the extension by commenting out \"#define SURFACE\" in defines.hpp.");
 #endif // SURFACE
 #ifndef TEMPERATURE
-	if(temperature_used) print_error("Some nodes are set as temperature boundary with the TYPE_T flag, but TEMPERATURE is not enabled. Uncomment \"#define TEMPERATURE\" in defines.hpp.");
+	if(temperature_used) print_error("Some cells are set as temperature boundary with the TYPE_T flag, but TEMPERATURE is not enabled. Uncomment \"#define TEMPERATURE\" in defines.hpp.");
 #endif // TEMPERATURE
 }
 
 void LBM::initialize() { // write all data fields to device and call kernel_initialize
+#ifndef BENCHMARK
 	sanity_checks_initialization();
+#endif // BENCHMARK
 
 	for(uint d=0u; d<get_D(); d++) lbm[d]->rho.enqueue_write_to_device();
 	for(uint d=0u; d<get_D(); d++) lbm[d]->u.enqueue_write_to_device();
@@ -855,52 +863,65 @@ void LBM::reset() { // reset simulation (takes effect in following run() call)
 }
 
 #ifdef FORCE_FIELD
-void LBM::calculate_force_on_boundaries() { // calculate forces from fluid on TYPE_S nodes
+void LBM::calculate_force_on_boundaries() { // calculate forces from fluid on TYPE_S cells
 	for(uint d=0u; d<get_D(); d++) lbm[d]->enqueue_calculate_force_on_boundaries();
 	for(uint d=0u; d<get_D(); d++) lbm[d]->finish_queue();
 }
-float3 LBM::calculate_force_on_object(const uchar flag_marker) { // add up force for all nodes flagged with flag_marker
-	double3 force(0.0, 0.0, 0.0);
-	for(ulong n=0ull; n<get_N(); n++) {
-		if(flags[n]==flag_marker) {
-			force.x += (double)F.x[n];
-			force.y += (double)F.y[n];
-			force.z += (double)F.z[n];
-		}
-	}
-	return float3(force.x, force.y, force.z);
-}
-float3 LBM::calculate_torque_on_object(const uchar flag_marker) { // add up torque around center of mass for all nodes flagged with flag_marker
-	double3 center_of_mass(0.0, 0.0, 0.0);
+float3 LBM::calculate_object_center_of_mass(const uchar flag_marker) { // calculate center of mass of all cells flagged with flag_marker
+	double3 com(0.0, 0.0, 0.0);
 	ulong counter = 0ull;
-	for(ulong n=0ull; n<get_N(); n++) {
+	const uint threads = thread::hardware_concurrency();
+	vector<double3> coms(threads, double3(0.0, 0.0, 0.0));
+	vector<ulong> counters(threads, 0ull);
+	parallel_for(get_N(), threads, [&](ulong n, uint t) {
 		if(flags[n]==flag_marker) {
 			const float3 p = position(n);
-			center_of_mass.x += (double)p.x;
-			center_of_mass.y += (double)p.y;
-			center_of_mass.z += (double)p.z;
-			counter++;
+			coms[t].x += (double)p.x;
+			coms[t].y += (double)p.y;
+			coms[t].z += (double)p.z;
+			counters[t]++;
 		}
+	});
+	for(uint t=0u; t<threads; t++) {
+		com += coms[t];
+		counter += counters[t];
 	}
-	return calculate_torque_on_object(float3(center_of_mass.x/(double)counter, center_of_mass.y/(double)counter, center_of_mass.z/(double)counter)+center(), flag_marker);
+	return float3((float)com.x/(float)counter, (float)com.y/(float)counter, (float)com.z/(float)counter)+center();
 }
-float3 LBM::calculate_torque_on_object(const float3& rotation_center, const uchar flag_marker) { // add up torque around specified rotation center for all nodes flagged with flag_marker
+float3 LBM::calculate_force_on_object(const uchar flag_marker) { // add up force for all cells flagged with flag_marker
+	double3 force(0.0, 0.0, 0.0);
+	const uint threads = thread::hardware_concurrency();
+	vector<double3> forces(threads, double3(0.0, 0.0, 0.0));
+	parallel_for(get_N(), threads, [&](ulong n, uint t) {
+		if(flags[n]==flag_marker) {
+			forces[t].x += (double)F.x[n];
+			forces[t].y += (double)F.y[n];
+			forces[t].z += (double)F.z[n];
+		}
+	});
+	for(uint t=0u; t<threads; t++) force += forces[t];
+	return float3((float)force.x, (float)force.y, (float)force.z);
+}
+float3 LBM::calculate_torque_on_object(const float3& rotation_center, const uchar flag_marker) { // add up torque around specified rotation center for all cells flagged with flag_marker
 	double3 torque(0.0, 0.0, 0.0);
 	const float3 rotation_center_in_box = rotation_center-center();
-	for(ulong n=0ull; n<get_N(); n++) {
+	const uint threads = thread::hardware_concurrency();
+	vector<double3> torques(threads, double3(0.0, 0.0, 0.0));
+	parallel_for(get_N(), threads, [&](ulong n, uint t) {
 		if(flags[n]==flag_marker) {
-			const float3 t = cross(position(n)-rotation_center_in_box, float3(F.x[n], F.y[n], F.z[n]));
-			torque.x += (double)t.x;
-			torque.y += (double)t.y;
-			torque.z += (double)t.z;
+			const float3 torquen = cross(position(n)-rotation_center_in_box, float3(F.x[n], F.y[n], F.z[n]));
+			torques[t].x += (double)torquen.x;
+			torques[t].y += (double)torquen.y;
+			torques[t].z += (double)torquen.z;
 		}
-	}
-	return float3(torque.x, torque.y, torque.z);
+	});
+	for(uint t=0u; t<threads; t++) torque += torques[t];
+	return float3((float)torque.x, (float)torque.y, (float)torque.z);
 }
 #endif // FORCE_FIELD
 
 #ifdef MOVING_BOUNDARIES
-void LBM::update_moving_boundaries() { // mark/unmark nodes next to TYPE_S nodes with velocity!=0 with TYPE_MS
+void LBM::update_moving_boundaries() { // mark/unmark cells next to TYPE_S cells with velocity!=0 with TYPE_MS
 	for(uint d=0u; d<get_D(); d++) lbm[d]->enqueue_update_moving_boundaries();
 	communicate_rho_u_flags();
 	for(uint d=0u; d<get_D(); d++) lbm[d]->finish_queue();
@@ -932,6 +953,7 @@ void LBM::write_status(const string& path) { // write LBM status report to a .tx
 	status += "Memory Usage = "+to_string(info.cpu_mem_required)+" MB (CPU), "+to_string(info.gpu_mem_required)+" MB (GPU)\n";
 	status += "Maximum Allocation Size = "+to_string((uint)(get_N()*(ulong)(get_velocity_set()*sizeof(fpxx))/1048576ull))+" MB\n";
 	status += "Time Step = "+to_string(get_t())+" / "+(info.steps==max_ulong ? "infinite" : to_string(info.steps))+"\n";
+	status += "Runtime = "+print_time(info.runtime_total)+" (total) = "+print_time(info.runtime_lbm)+" (LBM) + "+print_time(info.runtime_total-info.runtime_lbm)+" (rendering and data evaluation)\n";
 	status += "Kinematic Viscosity = "+to_string(get_nu())+"\n";
 	status += "Relaxation Time = "+to_string(get_tau())+"\n";
 	status += "Maximum Reynolds Number = "+to_string(get_Re_max())+"\n";
@@ -953,9 +975,9 @@ void LBM::voxelize_mesh_on_device(const Mesh* mesh, const uchar flag, const floa
 	if(get_D()==1u) {
 		lbm[0]->voxelize_mesh_on_device(mesh, flag, rotation_center, linear_velocity, rotational_velocity); // if this crashes on Windows, create a TdrDelay 32-bit DWORD with decimal value 300 in Computer\HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers
 	} else {
-		thread* threads=new thread[get_D()]; for(uint d=0u; d<get_D(); d++) threads[d]=thread([=]() {
+		parallel_for((ulong)get_D(), get_D(), [&](ulong d) {
 			lbm[d]->voxelize_mesh_on_device(mesh, flag, rotation_center, linear_velocity, rotational_velocity);
-		}); for(uint d=0u; d<get_D(); d++) threads[d].join(); delete[] threads;
+		});
 	}
 #ifdef MOVING_BOUNDARIES
 	if(flag==TYPE_S&&(length(linear_velocity)>0.0f||length(rotational_velocity)>0.0f)) update_moving_boundaries();
@@ -1049,8 +1071,14 @@ int* LBM::Graphics::draw_frame() {
 		if(key_Q) { slice_z = clamp(slice_z-1, 0, (int)lbm->get_Nz()-1); key_Q = false; }
 		if(key_E) { slice_z = clamp(slice_z+1, 0, (int)lbm->get_Nz()-1); key_E = false; }
 	}
+	const bool visualization_change = last_visualization_modes!=visualization_modes||last_slice_mode!=slice_mode||last_slice_x!=slice_x||last_slice_y!=slice_y||last_slice_z!=slice_z;
+	last_visualization_modes = visualization_modes;
+	last_slice_mode = slice_mode;
+	last_slice_x = slice_x;
+	last_slice_y = slice_y;
+	last_slice_z = slice_z;
 	bool new_frame = true;
-	for(uint d=0u; d<lbm->get_D(); d++) new_frame = new_frame && lbm->lbm[d]->graphics.enqueue_draw_frame(visualization_modes, slice_mode, slice_x, slice_y, slice_z);
+	for(uint d=0u; d<lbm->get_D(); d++) new_frame = new_frame && lbm->lbm[d]->graphics.enqueue_draw_frame(visualization_modes, slice_mode, slice_x, slice_y, slice_z, visualization_change);
 	for(uint d=0u; d<lbm->get_D(); d++) lbm->lbm[d]->finish_queue();
 	int* bitmap = lbm->lbm[0]->graphics.get_bitmap();
 	int* zbuffer = lbm->lbm[0]->graphics.get_zbuffer();

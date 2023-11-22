@@ -12,7 +12,7 @@ The fastest and most memory efficient lattice Boltzmann CFD software, running on
   - initial release
 - v1.1 (29.09.2022)
   - added solid voxelization on GPU (slow algorithm)
-  - added tool to print current camera position (key_H)
+  - added tool to print current camera position (key <kbd>H</kbd>)
   - minor bug fix (workaround for Intel iGPU driver bug with triangle rendering)
 - v1.2 (24.10.2022)
   - added functions to compute force/torque on objects
@@ -23,6 +23,7 @@ The fastest and most memory efficient lattice Boltzmann CFD software, running on
   - `FORCE_FIELD` and `VOLUME_FORCE` can now be used independently
   - minor bug fix (workaround for AMD legacy driver bug with binary number literals)
 - v1.4 (14.12.2022)
+  - complete rewrite of C++ graphics library to minimize API dependencies
   - added interactive graphics mode on Linux with X11
   - fixed streamline visualization bug in 2D
 - v2.0 (09.01.2023)
@@ -41,15 +42,15 @@ The fastest and most memory efficient lattice Boltzmann CFD software, running on
   - fixed bug in `write_line()` function in `src/utilities.hpp`
   - removed `.exe` file extension for Linux/macOS
 - v2.4 (11.03.2023)
-  - added a help menu with key H that shows keyboard/mouse controls, visualization settings and simulation stats
-  - improvements to keyboard/mouse control (+/- for zoom, mouseclick frees/locks cursor)
+  - added a help menu with key <kbd>H</kbd> that shows keyboard/mouse controls, visualization settings and simulation stats
+  - improvements to keyboard/mouse control (<kbd>+</kbd>/<kbd>-</kbd> for zoom, <kbd>mouseclick</kbd> frees/locks cursor)
   - added suggestion of largest possible grid resolution if resolution is set larger than memory allows
   - minor optimizations in multi-GPU communication (insignificant performance difference)
   - fixed bug in temperature equilibrium function for temperature extension
   - fixed erroneous double literal for Intel iGPUs in skybox color functions
   - fixed bug in make.sh where multi-GPU device IDs would not get forwarded to the executable
   - minor bug fixes in graphics engine (free cursor not centered during rotation, labels in VR mode)
-  - fixed bug in LBM::voxelize_stl() size parameter standard initialization
+  - fixed bug in `LBM::voxelize_stl()` size parameter standard initialization
 - v2.5 (11.04.2023)
   - implemented light absorption in fluid for raytracing graphics (no performance impact)
   - improved raytracing framerate when camera is inside fluid
@@ -78,14 +79,33 @@ The fastest and most memory efficient lattice Boltzmann CFD software, running on
   - simulation box dimensions are now automatically made equally divisible by domains for multi-GPU simulations
   - fixed Info/Warning/Error message formatting for loading files and made Info/Warning/Error message labels colored
   - added Ahmed body setup as an example on how body forces and drag coefficient are computed
-  - added Cessna 172 and Bell 222 setups to showcase loading composite .stl geometries and revoxelization moving parts
+  - added Cessna 172 and Bell 222 setups to showcase loading composite .stl geometries and revoxelization of moving parts
   - added optional semi-transparent rendering mode (`#define GRAPHICS_TRANSPARENCY 0.7f` in `defines.hpp`)
   - fixed flickering of streamline visualization in interactive graphics
   - improved smooth positioning of streamlines in slice mode
-  - fixed bug where mass and massex in SURFACE extension were also allocated in CPU RAM (not required)
+  - fixed bug where `mass` and `massex` in `SURFACE` extension were also allocated in CPU RAM (not required)
   - fixed bug in Q-criterion rendering of halo data in multi-GPU mode, reduced gap width between domains
   - removed shared memory optimization from mesh voxelization kernel, as it crashes on Nvidia GPUs with new GPU drivers and is incompatible with old OpenCL 1.0 GPUs
   - fixed raytracing attenuation color when no surface is at the simulation box walls with periodic boundaries
+- v2.9 (31.07.2023)
+  - added cross-platform `parallel_for` implementation in `utilities.hpp` using `std::threads`
+  - significantly (>4x) faster simulation startup with multithreaded geometry initialization and sanity checks
+  - faster `calculate_force_on_object()` and `calculate_torque_on_object()` functions with multithreading
+  - added total runtime and LBM runtime to `lbm.write_status()`
+  - fixed bug in voxelization ray direction for re-voxelizing rotating objects
+  - fixed bug in `Mesh::get_bounding_box_size()`
+  - fixed bug in `print_message()` function in `utilities.hpp`
+- v2.10 (05.11.2023)
+  - improved rasterization performance via frustrum culling when only part of the simulation box is visible
+  - improved switching between centered/free camera mode
+  - refactored OpenCL rendering library
+  - unit conversion factors are now automatically printed in console when `units.set_m_kg_s(...)` is used
+  - faster startup time for FluidX3D benchmark
+  - miner bug fix in `voxelize_mesh(...)` kernel
+  - fixed bug in `shading(...)`
+  - replaced slow (in multithreading) `std::rand()` function with standard C99 LCG
+  - more robust correction of wrong VRAM capacity reporting on Intel Arc GPUs
+  - fixed some minor compiler warnings
 
 </details>
 
@@ -93,7 +113,7 @@ The fastest and most memory efficient lattice Boltzmann CFD software, running on
 
 ## How to get started?
 
-Head over to the [FluidX3D Documentation](DOCUMENTATION.md)!
+Read the [FluidX3D Documentation](DOCUMENTATION.md)!
 
 
 
@@ -104,6 +124,32 @@ Head over to the [FluidX3D Documentation](DOCUMENTATION.md)!
   - streaming (part 2/2)<p align="center"><i>f</i><sub>0</sub><sup>temp</sup>(<i>x</i>,<i>t</i>) = <i>f</i><sub>0</sub>(<i>x</i>, <i>t</i>)<br><i>f<sub>i</sub></i><sup>temp</sup>(<i>x</i>,<i>t</i>) = <i>f</i><sub>(<i>t</i>%2 ? <i>i</i> : (<i>i</i>%2 ? <i>i</i>+1 : <i>i</i>-1))</sub>(<i>i</i>%2 ? <i>x</i> : <i>x</i>-<i>e<sub>i</sub></i>, <i>t</i>) &nbsp; for &nbsp; <i>i</i> &isin; [1, <i>q</i>-1]</p>
   - collision<p align="center"><i>&rho;</i>(<i>x</i>,<i>t</i>) = (&Sigma;<sub><i>i</i></sub> <i>f<sub>i</sub></i><sup>temp</sup>(<i>x</i>,<i>t</i>)) + 1<br><br><i>u</i>(<i>x</i>,<i>t</i>) = <sup>1</sup>&#8725;<sub><i>&rho;</i>(<i>x</i>,<i>t</i>)</sub> &Sigma;<sub><i>i</i></sub> <i>c<sub>i</sub></i> <i>f<sub>i</sub></i><sup>temp</sup>(<i>x</i>,<i>t</i>)<br><br><i>f<sub>i</sub></i><sup>eq-shifted</sup>(<i>x</i>,<i>t</i>) = <i>w<sub>i</sub></i> <i>&rho;</i> · (<sup>(<i>u</i><sub>°</sub><i>c<sub>i</sub></i>)<sup>2</sup></sup>&#8725;<sub>(2<i>c</i><sup>4</sup>)</sub> - <sup>(<i>u</i><sub>°</sub><i>u</i>)</sup>&#8725;<sub>(2c<sup>2</sup>)</sub> + <sup>(<i>u</i><sub>°</sub><i>c<sub>i</sub></i>)</sup>&#8725;<sub><i>c</i><sup>2</sup></sub>) + <i>w<sub>i</sub></i> (<i>&rho;</i>-1)<br><br><i>f<sub>i</sub></i><sup>temp</sup>(<i>x</i>, <i>t</i>+&Delta;<i>t</i>) = <i>f<sub>i</sub></i><sup>temp</sup>(<i>x</i>,<i>t</i>) + <i>&Omega;<sub>i</sub></i>(<i>f<sub>i</sub></i><sup>temp</sup>(<i>x</i>,<i>t</i>), <i>f<sub>i</sub></i><sup>eq-shifted</sup>(<i>x</i>,<i>t</i>), <i>&tau;</i>)</p>
   - streaming (part 1/2)<p align="center"><i>f</i><sub>0</sub>(<i>x</i>, <i>t</i>+&Delta;<i>t</i>) = <i>f</i><sub>0</sub><sup>temp</sup>(<i>x</i>, <i>t</i>+&Delta;<i>t</i>)<br><i>f</i><sub>(<i>t</i>%2 ? (<i>i</i>%2 ? <i>i</i>+1 : <i>i</i>-1) : <i>i</i>)</sub>(<i>i</i>%2 ? <i>x</i>+<i>e<sub>i</sub></i> : <i>x</i>, <i>t</i>+&Delta;<i>t</i>) = <i>f<sub>i</sub></i><sup>temp</sup>(<i>x</i>, <i>t</i>+&Delta;<i>t</i>) &nbsp; for &nbsp; <i>i</i> &isin; [1, <i>q</i>-1]</p>
+  - <details><summary>variables and <a href="https://doi.org/10.15495/EPub_UBT_00005400">notation</a></summary>
+
+    | variable             | SI units                            | defining equation                                   | description                                                                     |
+    | :------------------: | :---------------------------------: | :-------------------------------------------------: | :------------------------------------------------------------------------------ |
+    |                      |                                     |                                                     |                                                                                 |
+    | <i>x</i>             | m                                   | <i>x</i> = (x,y,z)<sup>T</sup>                      | 3D position in Cartesian coordinates                                            |
+    | <i>t</i>             | s                                   | -                                                   | time                                                                            |
+    | <i>&rho;</i>         | <sup>kg</sup>&#8725;<sub>m³</sub>   | <i>&rho;</i> = (&Sigma;<sub><i>i</i></sub> <i>f<sub>i</sub></i>)+1 | mass density of fluid                                            |
+    | <i>p</i>             | <sup>kg</sup>&#8725;<sub>m&nbsp;s²</sub> | <i>p</i> = <i>c</i>² <i>&rho;</i>              | pressure of fluid                                                               |
+    | <i>u</i> | <sup>m</sup>&#8725;<sub>s</sub> | <i>u</i> = <sup>1</sup>&#8725;<sub><i>&rho;</i></sub> &Sigma;<sub><i>i</i></sub> <i>c<sub>i</sub></i> <i>f<sub>i</sub></i> | velocity of fluid        |
+    | <i>&nu;</i>          | <sup>m²</sup>&#8725;<sub>s</sub>    | <i>&nu;</i> = <sup><i>&mu;</i></sup>&#8725;<sub><i>&rho;</i></sub> | kinematic shear viscosity of fluid                               |
+    | <i>&mu;</i>          | <sup>kg</sup>&#8725;<sub>m&nbsp;s</sub> | <i>&mu;</i> = <i>&rho;</i> <i>&nu;</i>          | dynamic viscosity of fluid                                                      |
+    |                      |                                     |                                                     |                                                                                 |
+    | <i>f<sub>i</sub></i> | <sup>kg</sup>&#8725;<sub>m³</sub>   | -                                                   | shifted density distribution functions (DDFs)                                   |
+    | &Delta;<i>x</i>      | m                                   | &Delta;<i>x</i> = 1                                 | lattice constant (in LBM units)                                                 |
+    | &Delta;<i>t</i>      | s                                   | &Delta;<i>t</i> = 1                                 | simulation time step (in LBM units)                                             |
+    | <i>c</i> | <sup>m</sup>&#8725;<sub>s</sub> | <i>c</i> = <sup>1</sup>&#8725;<sub>&radic;3</sub> <sup>&Delta;<i>x</i></sup>&#8725;<sub>&Delta;<i>t</i></sub> | lattice speed of sound (in LBM units) |
+    | <i>i</i>             | 1                                   | 0 &le; <i>i</i> < <i>q</i>                          | LBM streaming direction index                                                   |
+    | <i>q</i>             | 1                                   | <i>q</i> &isin; {&nbsp;9,15,19,27&nbsp;}            | number of LBM streaming directions                                              |
+    | <i>e<sub>i</sub></i> | m                                   | D2Q9 / D3Q15/19/27                                  | LBM streaming directions                                                        |
+    | <i>c<sub>i</sub></i> | <sup>m</sup>&#8725;<sub>s</sub>     | <i>c<sub>i</sub></i> = <sup><i>e<sub>i</sub></i></sup>&#8725;<sub>&Delta;<i>t</i></sub> | LBM streaming velocities                    |
+    | <i>w<sub>i</sub></i> | 1                                   | &Sigma;<sub><i>i</i></sub> <i>w<sub>i</sub></i> = 1 | LBM velocity set weights                                                        |
+    | <i>&Omega;<sub>i</sub></i> | <sup>kg</sup>&#8725;<sub>m³</sub> | SRT or TRT                                      | LBM collision operator                                                          |
+    | <i>&tau;</i>         | s                                  | <i>&tau;</i> = <sup><i>&nu;</i></sup>&#8725;<sub><i>c</i>²</sub> + <sup>&Delta;<i>t</i></sup>&#8725;<sub>2</sub> | LBM relaxation time |
+
+    </details>
   - velocity sets: D2Q9, D3Q15, D3Q19 (default), D3Q27
   - collision operators: single-relaxation-time (SRT/BGK) (default), two-relaxation-time (TRT)
   - [DDF-shifting](https://www.researchgate.net/publication/362275548_Accuracy_and_performance_of_the_lattice_Boltzmann_method_with_64-bit_32-bit_and_customized_16-bit_number_formats) and other algebraic optimization to minimize round-off error
@@ -152,7 +198,7 @@ $$f_j(i\\%2\\ ?\\ \vec{x}+\vec{e}_i\\ :\\ \vec{x},\\ t+\Delta t)=f_i^\textrm{tem
 
     | GPU&nbsp;VRAM&nbsp;capacity      | 1&nbsp;GB | 2&nbsp;GB | 3&nbsp;GB | 4&nbsp;GB | 6&nbsp;GB | 8&nbsp;GB | 10&nbsp;GB | 11&nbsp;GB | 12&nbsp;GB | 16&nbsp;GB | 20&nbsp;GB | 24&nbsp;GB | 32&nbsp;GB | 40&nbsp;GB | 48&nbsp;GB | 64&nbsp;GB | 80&nbsp;GB | 94&nbsp;GB | 128&nbsp;GB | 192&nbsp;GB | 256&nbsp;GB |
     | :------------------------------- | --------: | --------: | --------: | --------: | --------: | --------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ---------: | ----------: | ----------: | ----------: |
-    | approximate&nbsp;GPU&nbsp;price  | $25<br>GT&nbsp;210 | $25<br>GTX&nbsp;950 | $12<br>GTX&nbsp;1060 | $50<br>GT&nbsp;730 | $35<br>GTX&nbsp;1060 | $70<br>RX&nbsp;470 | $500<br>RTX&nbsp;3080 | $240<br>GTX&nbsp;1080&nbsp;Ti | $75<br>Tesla&nbsp;M40 | $75<br>Instinct&nbsp;MI25 | $900<br>RX&nbsp;7900&nbsp;XT | $205<br>Tesla&nbsp;P40 | $600<br>Instinct&nbsp;MI60 | $5500<br>A100 | $2400<br>RTX&nbsp;8000 | $10k<br>Instinct&nbsp;MI210 | $11k<br>A100 | >$40k<br>H100&nbsp;NVL | ?<br>Max&nbsp;Series&nbsp;1550 | - | - |
+    | approximate&nbsp;GPU&nbsp;price  | $25<br>GT&nbsp;210 | $25<br>GTX&nbsp;950 | $12<br>GTX&nbsp;1060 | $50<br>GT&nbsp;730 | $35<br>GTX&nbsp;1060 | $70<br>RX&nbsp;470 | $500<br>RTX&nbsp;3080 | $240<br>GTX&nbsp;1080&nbsp;Ti | $75<br>Tesla&nbsp;M40 | $75<br>Instinct&nbsp;MI25 | $900<br>RX&nbsp;7900&nbsp;XT | $205<br>Tesla&nbsp;P40 | $600<br>Instinct&nbsp;MI60 | $5500<br>A100 | $2400<br>RTX&nbsp;8000 | $10k<br>Instinct&nbsp;MI210 | $11k<br>A100 | >$40k<br>H100&nbsp;NVL | ?<br>GPU&nbsp;Max&nbsp;1550 | - | - |
     | traditional&nbsp;LBM&nbsp;(FP64) |      144³ |      182³ |      208³ |      230³ |      262³ |      288³ |       312³ |       322³ |       330³ |       364³ |       392³ |       418³ |       460³ |       494³ |       526³ |       578³ |       624³ |       658³ |        730³ |        836³ |        920³ |
     | FluidX3D&nbsp;(FP32/FP32)        |      224³ |      282³ |      322³ |      354³ |      406³ |      448³ |       482³ |       498³ |       512³ |       564³ |       608³ |       646³ |       710³ |       766³ |       814³ |       896³ |       966³ |      1018³ |       1130³ |       1292³ |       1422³ |
     | FluidX3D&nbsp;(FP32/FP16)        |      266³ |      336³ |      384³ |      424³ |      484³ |      534³ |       574³ |       594³ |       610³ |       672³ |       724³ |       770³ |       848³ |       912³ |       970³ |      1068³ |      1150³ |      1214³ |       1346³ |       1540³ |       1624³ |
@@ -303,8 +349,8 @@ $$f_j(i\\%2\\ ?\\ \vec{x}+\vec{e}_i\\ :\\ \vec{x},\\ t+\Delta t)=f_i^\textrm{tem
   - gaming GPUs (desktop or laptop), like Nvidia GeForce, AMD Radeon, Intel Arc
   - professional/workstation GPUs, like Nvidia Quadro, AMD Radeon Pro / FirePro
   - integrated GPUs
-  - Intel Xeon Phi (requires installation of the [Intel OpenCL CPU Runtime ("oclcpuexp")](https://github.com/intel/llvm/releases?q=oneAPI+DPC%2B%2B+Compiler))
-  - Intel/AMD CPUs (requires installation of the [Intel OpenCL CPU Runtime ("oclcpuexp")](https://github.com/intel/llvm/releases?q=oneAPI+DPC%2B%2B+Compiler))
+  - Intel Xeon Phi (requires installation of [Intel OpenCL CPU Runtime](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-cpu-runtime-for-opencl-applications-with-sycl-support.html) ([Repo](https://github.com/intel/llvm/releases?q=oneAPI+DPC%2B%2B+Compiler)))
+  - Intel/AMD CPUs (requires installation of [Intel OpenCL CPU Runtime](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-cpu-runtime-for-opencl-applications-with-sycl-support.html) ([Repo](https://github.com/intel/llvm/releases?q=oneAPI+DPC%2B%2B+Compiler)))
   - even smartphone ARM GPUs
 - native cross-vendor multi-GPU implementation
   - uses PCIe communication, so no SLI/Crossfire/NVLink/InfinityFabric required
@@ -320,7 +366,7 @@ $$f_j(i\\%2\\ ?\\ \vec{x}+\vec{e}_i\\ :\\ \vec{x},\\ t+\Delta t)=f_i^\textrm{tem
 
 ## Single-GPU/CPU Benchmarks
 
-Here are [performance benchmarks](https://doi.org/10.3390/computation10060092) on various hardware in MLUPs/s, or how many million lattice points are updated per second. The settings used for the benchmark are D3Q19 SRT with no extensions enabled (only LBM with implicit mid-grid bounce-back boundaries) and the setup consists of an empty cubic box with sufficient size (typically 256³). Without extensions, a single lattice point requires:
+Here are [performance benchmarks](https://doi.org/10.3390/computation10060092) on various hardware in MLUPs/s, or how many million lattice cells are updated per second. The settings used for the benchmark are D3Q19 SRT with no extensions enabled (only LBM with implicit mid-grid bounce-back boundaries) and the setup consists of an empty cubic box with sufficient size (typically 256³). Without extensions, a single lattice cell requires:
 - a memory capacity of 93 (FP32/FP32) or 55 (FP32/FP16) Bytes
 - a memory bandwidth of 153 (FP32/FP32) or 77 (FP32/FP16) Bytes per time step
 - 363 (FP32/FP32) or 406 (FP32/FP16S) or 1275 (FP32/FP16C) FLOPs per time step (FP32+INT32 operations counted combined)
@@ -329,7 +375,7 @@ In consequence, the arithmetic intensity of this implementation is 2.37 (FP32/FP
 
 If your GPU/CPU is not on the list yet, you can report your benchmarks [here](https://github.com/ProjectPhysX/FluidX3D/issues/8).
 
-Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfly
+Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, ⚪ Apple, 🟡 ARM, 🟤 Glenfly
 
 | Device                                           | FP32<br>[TFlops/s] | Mem<br>[GB] | BW<br>[GB/s] | FP32/FP32<br>[MLUPs/s] | FP32/FP16S<br>[MLUPs/s] | FP32/FP16C<br>[MLUPs/s] |
 | :----------------------------------------------- | -----------------: | ----------: | -----------: | ---------------------: | ----------------------: | ----------------------: |
@@ -339,12 +385,15 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 | 🔴&nbsp;Instinct&nbsp;MI100                      |              46.14 |          32 |         1228 |             5093 (63%) |              8133 (51%) |              8542 (54%) |
 | 🔴&nbsp;Instinct&nbsp;MI60                       |              14.75 |          32 |         1024 |             3570 (53%) |              5047 (38%) |              5111 (38%) |
 | 🔴&nbsp;Radeon&nbsp;VII                          |              13.83 |          16 |         1024 |             4898 (73%) |              7778 (58%) |              5256 (40%) |
-| 🟢&nbsp;H100&nbsp;PCIe&nbsp;80GB                 |              51.01 |          80 |         2000 |       11128&nbsp;(85%) |             20624 (79%) |             13862 (53%) |
-| 🟢&nbsp;A100&nbsp;SXM4&nbsp;80GB                 |              19.49 |          80 |         2039 |       10228&nbsp;(77%) |             18448 (70%) |             11197 (42%) |
-| 🟢&nbsp;A100&nbsp;SXM4&nbsp;40GB                 |              19.49 |          40 |         1555 |             8522 (84%) |             16013 (79%) |             11251 (56%) |
-| 🟢&nbsp;A100&nbsp;PCIe&nbsp;40GB                 |              19.49 |          40 |         1555 |             8526 (84%) |             16035 (79%) |             11088 (55%) |
+| 🔵&nbsp;Data&nbsp;Center&nbsp;GPU&nbsp;Max&nbsp;1100 |          22.22 |          48 |         1229 |             3487 (43%) |              6209 (39%) |              3252 (20%) |
+| 🟢&nbsp;H100&nbsp;PCIe&nbsp;80GB                 |              51.01 |          80 |         2000 |       11128&nbsp;(85%) |        20624&nbsp;(79%) |        13862&nbsp;(53%) |
+| 🟢&nbsp;A100&nbsp;SXM4&nbsp;80GB                 |              19.49 |          80 |         2039 |       10228&nbsp;(77%) |        18448&nbsp;(70%) |        11197&nbsp;(42%) |
+| 🟢&nbsp;A100&nbsp;PCIe&nbsp;80GB                 |              19.49 |          80 |         1935 |             9657 (76%) |        17896&nbsp;(71%) |        10817&nbsp;(43%) |
+| 🟢&nbsp;A100&nbsp;SXM4&nbsp;40GB                 |              19.49 |          40 |         1555 |             8522 (84%) |        16013&nbsp;(79%) |        11251&nbsp;(56%) |
+| 🟢&nbsp;A100&nbsp;PCIe&nbsp;40GB                 |              19.49 |          40 |         1555 |             8526 (84%) |        16035&nbsp;(79%) |        11088&nbsp;(55%) |
+| 🟢&nbsp;CMP&nbsp;170HX                           |               6.32 |           8 |         1493 |             7684 (79%) |        12392&nbsp;(64%) |              6859 (35%) |
 | 🟢&nbsp;Tesla&nbsp;V100&nbsp;SXM2&nbsp;32GB      |              15.67 |          32 |          900 |             4471 (76%) |              8947 (77%) |              7217 (62%) |
-| 🟢&nbsp;Tesla&nbsp;V100&nbsp;PCIe&nbsp;16GB      |              14.13 |          16 |          900 |             5128 (87%) |             10325 (88%) |              7683 (66%) |
+| 🟢&nbsp;Tesla&nbsp;V100&nbsp;PCIe&nbsp;16GB      |              14.13 |          16 |          900 |             5128 (87%) |        10325&nbsp;(88%) |              7683 (66%) |
 | 🟢&nbsp;Quadro&nbsp;GV100                        |              16.66 |          32 |          870 |             3442 (61%) |              6641 (59%) |              5863 (52%) |
 | 🟢&nbsp;Titan&nbsp;V                             |              14.90 |          12 |          653 |             3601 (84%) |              7253 (86%) |              6957 (82%) |
 | 🟢&nbsp;Tesla&nbsp;P100&nbsp;16GB                |               9.52 |          16 |          732 |             3295 (69%) |              5950 (63%) |              4176 (44%) |
@@ -362,19 +411,24 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 | 🔴&nbsp;Radeon&nbsp;RX&nbsp;6900&nbsp;XT         |              23.04 |          16 |          512 |             1968 (59%) |              4227 (64%) |              4207 (63%) |
 | 🔴&nbsp;Radeon&nbsp;RX&nbsp;6800&nbsp;XT         |              20.74 |          16 |          512 |             2008 (60%) |              4241 (64%) |              4224 (64%) |
 | 🔴&nbsp;Radeon&nbsp;PRO&nbsp;W6800               |              17.83 |          32 |          512 |             1620 (48%) |              3361 (51%) |              3180 (48%) |
+| 🔴&nbsp;Radeon&nbsp;RX&nbsp;6700&nbsp;XT         |              13.21 |          12 |          384 |             1408 (56%) |              2883 (58%) |              2908 (58%) |
 | 🔴&nbsp;Radeon&nbsp;RX&nbsp;6800M                |              11.78 |          12 |          384 |             1439 (57%) |              3190 (64%) |              3213 (64%) |
 | 🔴&nbsp;Radeon&nbsp;RX&nbsp;6700M                |              10.60 |          10 |          320 |             1194 (57%) |              2388 (57%) |              2429 (58%) |
 | 🔴&nbsp;Radeon&nbsp;RX&nbsp;5700&nbsp;XT         |               9.75 |           8 |          448 |             1368 (47%) |              3253 (56%) |              3049 (52%) |
+| 🔴&nbsp;Radeon&nbsp;RX&nbsp;5600&nbsp;XT         |               6.73 |           6 |          288 |             1136 (60%) |              2214 (59%) |              2148 (57%) |
 | 🔴&nbsp;Radeon&nbsp;RX&nbsp;Vega&nbsp;64         |              13.35 |           8 |          484 |             1875 (59%) |              2878 (46%) |              3227 (51%) |
 | 🔴&nbsp;Radeon&nbsp;RX&nbsp;580&nbsp;4GB         |               6.50 |           4 |          256 |              946 (57%) |              1848 (56%) |              1577 (47%) |
 | 🔴&nbsp;Radeon&nbsp;R9&nbsp;390X                 |               5.91 |           8 |          384 |             1733 (69%) |              2217 (44%) |              1722 (35%) |
 | 🔴&nbsp;Radeon&nbsp;HD&nbsp;7850                 |               1.84 |           2 |          154 |              112 (11%) |               120 ( 6%) |               635 (32%) |
 | 🔵&nbsp;Arc&nbsp;A770&nbsp;LE                    |              19.66 |          16 |          560 |             2741 (75%) |              4591 (63%) |              4626 (64%) |
 | 🔵&nbsp;Arc&nbsp;A750&nbsp;LE                    |              17.20 |           8 |          512 |             2625 (78%) |              4184 (63%) |              4238 (64%) |
+| 🔵&nbsp;Arc&nbsp;A580                            |              12.29 |           8 |          512 |             2534 (76%) |              3889 (58%) |              3488 (52%) |
+| 🔵&nbsp;Arc&nbsp;A380                            |               4.20 |           6 |          186 |              622 (51%) |              1097 (45%) |              1115 (46%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;4090               |              82.58 |          24 |         1008 |             5624 (85%) |             11091 (85%) |             11496 (88%) |
 | 🟢&nbsp;RTX&nbsp;6000&nbsp;Ada                   |              91.10 |          48 |          960 |             4997 (80%) |             10249 (82%) |             10293 (83%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;4080               |              55.45 |          16 |          717 |             3914 (84%) |              7626 (82%) |              7933 (85%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;4070               |              29.15 |          12 |          504 |             2646 (80%) |              4548 (69%) |              5016 (77%) |
+| 🟢&nbsp;GeForce&nbsp;RTX&nbsp;4080M              |              33.85 |          12 |          432 |             2577 (91%) |              5086 (91%) |              5114 (91%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3090&nbsp;Ti       |              40.00 |          24 |         1008 |             5717 (87%) |             10956 (84%) |             10400 (79%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3090               |              39.05 |          24 |          936 |             5418 (89%) |             10732 (88%) |             10215 (84%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3080&nbsp;Ti       |              37.17 |          12 |          912 |             5202 (87%) |              9832 (87%) |              9347 (79%) |
@@ -382,9 +436,11 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3080               |              29.77 |          10 |          760 |             4230 (85%) |              8118 (82%) |              7714 (78%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3070               |              20.31 |           8 |          448 |             2578 (88%) |              5096 (88%) |              5060 (87%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3060&nbsp;Ti       |              16.49 |           8 |          448 |             2644 (90%) |              5129 (88%) |              4718 (81%) |
+| 🟢&nbsp;RTX&nbsp;A4000                           |              19.17 |          16 |          448 |             2500 (85%) |              4945 (85%) |              4664 (80%) |
 | 🟢&nbsp;RTX&nbsp;A5000M                          |              16.59 |          16 |          448 |             2228 (76%) |              4461 (77%) |              3662 (63%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3060               |              13.17 |          12 |          360 |             2108 (90%) |              4070 (87%) |              3566 (76%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3060M              |              10.94 |           6 |          336 |             2019 (92%) |              4012 (92%) |              3572 (82%) |
+| 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3050M&nbsp;Ti      |               7.60 |           4 |          192 |             1181 (94%) |              2341 (94%) |              2253 (90%) |
 | 🟢&nbsp;GeForce&nbsp;RTX&nbsp;3050M              |               7.13 |           4 |          192 |             1180 (94%) |              2339 (94%) |              2016 (81%) |
 | 🟢&nbsp;Titan&nbsp;RTX                           |              16.31 |          24 |          672 |             3471 (79%) |              7456 (85%) |              7554 (87%) |
 | 🟢&nbsp;Quadro&nbsp;RTX&nbsp;6000                |              16.31 |          24 |          672 |             3307 (75%) |              6836 (78%) |              6879 (79%) |
@@ -400,7 +456,9 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 | 🟢&nbsp;Tesla&nbsp;T4                            |               8.14 |          15 |          300 |             1356 (69%) |              2869 (74%) |              2887 (74%) |
 | 🟢&nbsp;GeForce&nbsp;GTX&nbsp;1660&nbsp;Ti       |               5.48 |           6 |          288 |             1467 (78%) |              3041 (81%) |              3019 (81%) |
 | 🟢&nbsp;GeForce&nbsp;GTX&nbsp;1660               |               5.07 |           6 |          192 |             1016 (81%) |              1924 (77%) |              1992 (80%) |
-| 🟢&nbsp;GeForce&nbsp;GTX&nbsp;1650M              |               3.20 |           4 |          128 |              706 (84%) |              1214 (73%) |              1400 (84%) |
+| 🟢&nbsp;GeForce&nbsp;GTX&nbsp;1650M&nbsp;896C    |               2.72 |           4 |          192 |              963 (77%) |              1836 (74%) |              1858 (75%) |
+| 🟢&nbsp;GeForce&nbsp;GTX&nbsp;1650M&nbsp;1024C   |               3.20 |           4 |          128 |              706 (84%) |              1214 (73%) |              1400 (84%) |
+| 🟢&nbsp;T500                                     |               3.04 |           4 |           80 |              339 (65%) |               578 (56%) |               665 (64%) |
 | 🟢&nbsp;Titan&nbsp;Xp                            |              12.15 |          12 |          548 |             2919 (82%) |              5495 (77%) |              5375 (76%) |
 | 🟢&nbsp;GeForce&nbsp;GTX&nbsp;1080&nbsp;Ti       |              12.06 |          11 |          484 |             2631 (83%) |              4837 (77%) |              4877 (78%) |
 | 🟢&nbsp;GeForce&nbsp;GTX&nbsp;1080               |               9.78 |           8 |          320 |             1623 (78%) |              3100 (75%) |              3182 (77%) |
@@ -418,18 +476,20 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 | 🟢&nbsp;Quadro&nbsp;NVS&nbsp;290                 |               0.03 |       0.256 |            6 |                1 ( 2%) |                 1 ( 1%) |                 1 ( 1%) |
 | 🟤&nbsp;Arise&nbsp;1020                          |               1.50 |           2 |           19 |                6 ( 5%) |                 6 ( 2%) |                 6 ( 2%) |
 |                                                  |                    |             |              |                        |                         |                         |
-| 🟣&nbsp;M2&nbsp;Max&nbsp;GPU&nbsp;38C&nbsp;32GB  |               9.73 |          22 |          400 |             2405 (92%) |              4641 (89%) |              2444 (47%) |
-| 🟣&nbsp;M1&nbsp;Max&nbsp;GPU&nbsp;24C&nbsp;32GB  |               6.14 |          22 |          400 |             2369 (91%) |              4496 (87%) |              2777 (53%) |
-| 🟣&nbsp;M1&nbsp;Pro&nbsp;GPU&nbsp;16C&nbsp;16GB  |               4.10 |          11 |          200 |             1204 (92%) |              2329 (90%) |              1855 (71%) |
+| ⚪&nbsp;M2&nbsp;Max&nbsp;GPU&nbsp;38C&nbsp;32GB  |               9.73 |          22 |          400 |             2405 (92%) |              4641 (89%) |              2444 (47%) |
+| ⚪&nbsp;M1&nbsp;Max&nbsp;GPU&nbsp;24C&nbsp;32GB  |               6.14 |          22 |          400 |             2369 (91%) |              4496 (87%) |              2777 (53%) |
+| ⚪&nbsp;M1&nbsp;Pro&nbsp;GPU&nbsp;16C&nbsp;16GB  |               4.10 |          11 |          200 |             1204 (92%) |              2329 (90%) |              1855 (71%) |
 | 🔴&nbsp;Radeon&nbsp;780M&nbsp;(Z1&nbsp;Extreme)  |               8.29 |           8 |          102 |              443 (66%) |               860 (65%) |               820 (62%) |
 | 🔴&nbsp;Radeon&nbsp;Vega&nbsp;8&nbsp;(4750G)     |               2.15 |          27 |           57 |              263 (71%) |               511 (70%) |               501 (68%) |
 | 🔴&nbsp;Radeon&nbsp;Vega&nbsp;8&nbsp;(3500U)     |               1.23 |           7 |           38 |              157 (63%) |               282 (57%) |               288 (58%) |
+| 🔵&nbsp;Iris&nbsp;Xe&nbsp;Graphics&nbsp;(i7-1265U) |             1.92 |          13 |           77 |              342 (68%) |               621 (62%) |               574 (58%) |
 | 🔵&nbsp;UHD&nbsp;Graphics&nbsp;Xe&nbsp;32EUs     |               0.74 |          25 |           51 |              128 (38%) |               245 (37%) |               216 (32%) |
 | 🔵&nbsp;UHD&nbsp;Graphics&nbsp;630               |               0.46 |           7 |           51 |              151 (45%) |               301 (45%) |               187 (28%) |
 | 🔵&nbsp;UHD&nbsp;Graphics&nbsp;P630              |               0.46 |          51 |           42 |              177 (65%) |               288 (53%) |               137 (25%) |
 | 🔵&nbsp;HD&nbsp;Graphics&nbsp;5500               |               0.35 |           3 |           26 |               75 (45%) |               192 (58%) |               108 (32%) |
 | 🔵&nbsp;HD&nbsp;Graphics&nbsp;4600               |               0.38 |           2 |           26 |              105 (63%) |               115 (35%) |                34 (10%) |
-| 🟡&nbsp;ARM&nbsp;Mali-G72&nbsp;MP18              |               0.24 |           4 |           29 |               14 ( 7%) |                17 ( 5%) |                12 ( 3%) |
+| 🟡&nbsp;Mali-G610&nbsp;MP4 (Orange&nbsp;Pi&nbsp;5&nbsp;Plus) |   0.06 |          16 |           34 |               43 (19%) |                59 (13%) |                19 ( 4%) |
+| 🟡&nbsp;Mali-G72&nbsp;MP18 (Samsung&nbsp;S9+)    |               0.24 |           4 |           29 |               14 ( 7%) |                17 ( 5%) |                12 ( 3%) |
 |                                                  |                    |             |              |                        |                         |                         |
 | 🔴&nbsp;2x&nbsp;EPYC&nbsp;9654                   |              29.49 |        1536 |          922 |             1381 (23%) |              1814 (15%) |              1801 (15%) |
 | 🔵&nbsp;2x&nbsp;Xeon&nbsp;CPU&nbsp;Max&nbsp;9480 |              13.62 |         256 |          614 |             2037 (51%) |              1520 (19%) |              1464 (18%) |
@@ -444,6 +504,7 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 | 🔵&nbsp;2x&nbsp;Xeon&nbsp;E5-2630&nbsp;v4        |               1.41 |          64 |          137 |              264 (30%) |               146 ( 8%) |               129 ( 7%) |
 | 🔵&nbsp;2x&nbsp;Xeon&nbsp;E5-2623&nbsp;v4        |               0.67 |          64 |          137 |              125 (14%) |                66 ( 4%) |                59 ( 3%) |
 | 🔵&nbsp;2x&nbsp;Xeon&nbsp;E5-2680&nbsp;v3        |               1.92 |          64 |          137 |              209 (23%) |               305 (17%) |               281 (16%) |
+| 🔵&nbsp;Core&nbsp;i7-1265U                       |               1.23 |          32 |           77 |              128 (26%) |                62 ( 6%) |                58 ( 6%) |
 | 🔵&nbsp;Core&nbsp;i9-11900KB                     |               0.84 |          32 |           51 |              109 (33%) |               195 (29%) |               208 (31%) |
 | 🔵&nbsp;Core&nbsp;i9-10980XE                     |               3.23 |         128 |           94 |              286 (47%) |               251 (21%) |               223 (18%) |
 | 🔵&nbsp;Core&nbsp;i5-9600                        |               0.60 |          16 |           43 |              146 (52%) |               127 (23%) |               147 (27%) |
@@ -459,7 +520,7 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 
 Multi-GPU benchmarks are done at the largest possible grid resolution with a cubic domain, and either 2x1x1, 2x2x1 or 2x2x2 of these cubic domains together. The percentages in brackets are single-GPU roofline model efficiency, and the multiplicator numbers in brackets are scaling factors relative to benchmarked single-GPU performance.
 
-Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfly
+Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, ⚪ Apple, 🟡 ARM, 🟤 Glenfly
 
 | Device                                                          | FP32<br>[TFlops/s] | Mem<br>[GB] | BW<br>[GB/s] | FP32/FP32<br>[MLUPs/s] | FP32/FP16S<br>[MLUPs/s] | FP32/FP16C<br>[MLUPs/s] |
 | :-------------------------------------------------------------- | -----------------: | ----------: | -----------: | ---------------------: | ----------------------: | ----------------------: |
@@ -469,17 +530,33 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 | 🔴&nbsp;2x&nbsp;Instinct&nbsp;MI250&nbsp;(4&nbsp;GCD)           |             181.04 |         256 |         6554 |      16925&nbsp;(3.0x) |            29163 (3.2x) |            29627 (3.5x) |
 | 🔴&nbsp;4x&nbsp;Instinct&nbsp;MI250&nbsp;(8&nbsp;GCD)           |             362.08 |         512 |        13107 |      27350&nbsp;(4.9x) |            52258 (5.8x) |            53521 (6.3x) |
 |                                                                 |                    |             |              |                        |                         |                         |
+| 🔴&nbsp;&nbsp;&nbsp;1x&nbsp;Instinct&nbsp;MI210                 |              45.26 |          64 |         1638 |             6347 (59%) |              8486 (40%) |              9105 (43%) |
+| 🔴&nbsp;&nbsp;&nbsp;2x&nbsp;Instinct&nbsp;MI210                 |              90.52 |         128 |         3277 |            7245 (1.1x) |            12050 (1.4x) |            13539 (1.5x) |
+| 🔴&nbsp;&nbsp;&nbsp;4x&nbsp;Instinct&nbsp;MI210                 |             181.04 |         256 |         6554 |            8816 (1.4x) |            17232 (2.0x) |            16892 (1.9x) |
+| 🔴&nbsp;&nbsp;&nbsp;8x&nbsp;Instinct&nbsp;MI210                 |             362.08 |         512 |        13107 |      13546&nbsp;(2.1x) |            27996 (3.3x) |            27820 (3.1x) |
+| 🔴&nbsp;16x&nbsp;Instinct&nbsp;MI210                            |             724.16 |        1024 |        26214 |      18094&nbsp;(2.9x) |            37360 (4.4x) |            37922 (4.2x) |
+| 🔴&nbsp;24x&nbsp;Instinct&nbsp;MI210                            |            1086.24 |        1536 |        39322 |      22056&nbsp;(3.5x) |            45033 (5.3x) |            44631 (4.9x) |
+| 🔴&nbsp;32x&nbsp;Instinct&nbsp;MI210                            |            1448.32 |        2048 |        52429 |      23881&nbsp;(3.8x) |            50952 (6.0x) |            48848 (5.4x) |
+|                                                                 |                    |             |              |                        |                         |                         |
 | 🔴&nbsp;1x&nbsp;Radeon&nbsp;VII                                 |              13.83 |          16 |         1024 |             4898 (73%) |              7778 (58%) |              5256 (40%) |
 | 🔴&nbsp;2x&nbsp;Radeon&nbsp;VII                                 |              27.66 |          32 |         2048 |            8113 (1.7x) |            15591 (2.0x) |            10352 (2.0x) |
 | 🔴&nbsp;4x&nbsp;Radeon&nbsp;VII                                 |              55.32 |          64 |         4096 |      12911&nbsp;(2.6x) |            24273 (3.1x) |            17080 (3.2x) |
 | 🔴&nbsp;8x&nbsp;Radeon&nbsp;VII                                 |             110.64 |         128 |         8192 |      21946&nbsp;(4.5x) |            30826 (4.0x) |            24572 (4.7x) |
 |                                                                 |                    |             |              |                        |                         |                         |
-| 🟢&nbsp;1x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              19.49 |          40 |         1555 |             8543 (84%) |             15917 (79%) |              8748 (43%) |
+| 🔵&nbsp;1x&nbsp;DC&nbsp;GPU&nbsp;Max&nbsp;1100                  |              22.22 |          48 |         1229 |             3487 (43%) |              6209 (39%) |              3252 (20%) |
+| 🔵&nbsp;2x&nbsp;DC&nbsp;GPU&nbsp;Max&nbsp;1100                  |              44.44 |          96 |         2458 |            6301 (1.8x) |            11815 (1.9x) |             5970 (1.8x) |
+| 🔵&nbsp;4x&nbsp;DC&nbsp;GPU&nbsp;Max&nbsp;1100                  |              88.88 |         192 |         4915 |           12162 (3.5x) |            22777 (3.7x) |            11759 (3.6x) |
+|                                                                 |                    |             |              |                        |                         |                         |
+| 🟢&nbsp;1x&nbsp;A100&nbsp;PCIe&nbsp;80GB                        |              19.49 |          80 |         1935 |             9657 (76%) |        17896&nbsp;(71%) |        10817&nbsp;(43%) |
+| 🟢&nbsp;2x&nbsp;A100&nbsp;PCIe&nbsp;80GB                        |              38.98 |         160 |         3870 |      15742&nbsp;(1.6x) |       27165&nbsp;(1.5x) |       17510&nbsp;(1.6x) |
+| 🟢&nbsp;4x&nbsp;A100&nbsp;PCIe&nbsp;80GB                        |              77.96 |         320 |         7740 |      25957&nbsp;(2.7x) |       52056&nbsp;(2.9x) |       33283&nbsp;(3.1x) |
+|                                                                 |                    |             |              |                        |                         |                         |
+| 🟢&nbsp;1x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              19.49 |          40 |         1555 |             8543 (84%) |        15917&nbsp;(79%) |              8748 (43%) |
 | 🟢&nbsp;2x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              38.98 |          80 |         3110 |      14311&nbsp;(1.7x) |            23707 (1.5x) |            15512 (1.8x) |
 | 🟢&nbsp;4x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              77.96 |         160 |         6220 |      23411&nbsp;(2.7x) |            42400 (2.7x) |            29017 (3.3x) |
 | 🟢&nbsp;8x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |             155.92 |         320 |        12440 |      37619&nbsp;(4.4x) |            72965 (4.6x) |            63009 (7.2x) |
 |                                                                 |                    |             |              |                        |                         |                         |
-| 🟢&nbsp;1x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              19.49 |          40 |         1555 |             8522 (84%) |             16013 (79%) |             11251 (56%) |
+| 🟢&nbsp;1x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              19.49 |          40 |         1555 |             8522 (84%) |        16013&nbsp;(79%) |        11251&nbsp;(56%) |
 | 🟢&nbsp;2x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              38.98 |          80 |         3110 |      13629&nbsp;(1.6x) |            24620 (1.5x) |            18850 (1.7x) |
 | 🟢&nbsp;4x&nbsp;A100&nbsp;SXM4&nbsp;40GB                        |              77.96 |         160 |         6220 |      17978&nbsp;(2.1x) |            30604 (1.9x) |            30627 (2.7x) |
 |                                                                 |                    |             |              |                        |                         |                         |
@@ -510,7 +587,7 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 
 ### General
 
-- <details><summary>How to learn using FluidX3D?</summary><br>Follow the <a href="https://github.com/ProjectPhysX/FluidX3D-Beta/blob/master/DOCUMENTATION.md">FluidX3D Documentation</a>!<br><br></details>
+- <details><summary>How to learn using FluidX3D?</summary><br>Follow the <a href="https://github.com/ProjectPhysX/FluidX3D/blob/master/DOCUMENTATION.md">FluidX3D Documentation</a>!<br><br></details>
 
 - <details><summary>What physical model does FluidX3D use?</summary><br>FluidX3D implements the lattice Boltzmann method, a type of direct numerical simulation (DNS), the most accurate type of fluid simulation, but also the most computationally challenging. Optional extension models include volume force (Guo forcing), free surface (<a href="https://doi.org/10.3390/computation10060092">volume-of-fluid</a> and <a href="https://doi.org/10.3390/computation10020021">PLIC</a>), a temperature model and Smagorinsky-Lilly subgrid turbulence model.<br><br></details>
 
@@ -538,9 +615,9 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 
 - <details><summary>I don't have a dedicated graphics card at all. Can I still run FluidX3D on my PC/laptop?</summary><br>Yes. FluidX3D also runs on all integrated GPUs since around 2012, and also on CPUs.<br><br></details>
 
-- <details><summary>I need more memory than my GPU can offer. Can I run FluidX3D on my CPU as well?</summary><br>Yes. You only need to install the <a href="https://github.com/intel/llvm/releases/tag/2022-09">OpenCL Runtime for Intel CPUs</a>.<br><br></details>
+- <details><summary>I need more memory than my GPU can offer. Can I run FluidX3D on my CPU as well?</summary><br>Yes. You only need to install the <a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-cpu-runtime-for-opencl-applications-with-sycl-support.html">Intel OpenCL CPU Runtime</a>.<br><br></details>
 
-- <details><summary>In the benchmarks you list some very expensive hardware. How do you get access to that?</summary><br>I'm a scientist (PhD candidate in computational physics) and I use FluidX3D for my research, so I have access to BZHPC, SuperMUC-NG and JURECA-DC supercomputers.<br><br></details>
+- <details><summary>In the benchmarks you list some very expensive hardware. How do you get access to that?</summary><br>As a PhD candidate in computational physics, I used FluidX3D for my research, so I had access to BZHPC, SuperMUC-NG and JSC JURECA-DC supercomputers.<br><br></details>
 
 ### Graphics
 
@@ -592,4 +669,4 @@ Colors: 🔴 AMD, 🔵 Intel, 🟢 Nvidia, 🟣 Apple, 🟡 Samsung, 🟤 Glenfl
 
 - FluidX3D is solo-developed and maintained by Dr. Moritz Lehmann.
 - For any questions, feedback or other inquiries, contact me at [dr.moritz.lehmann@gmail.com](mailto:dr.moritz.lehmann@gmail.com?subject=FluidX3D).
-- Updates are posted on Twitter via [@FluidX3D](https://twitter.com/FluidX3D)/[@ProjectPhysX](https://twitter.com/ProjectPhysX)/[#FluidX3D](https://twitter.com/hashtag/FluidX3D?src=hashtag_click&f=live) and on [YouTube](https://www.youtube.com/c/ProjectPhysX).
+- Updates are posted on Mastodon via [@ProjectPhysX](https://mast.hpc.social/@ProjectPhysX)/[#FluidX3D](https://mast.hpc.social/tags/FluidX3D) and on [YouTube](https://youtube.com/@ProjectPhysX).

@@ -171,20 +171,15 @@ string opencl_c_container() { return R( // ########################## begin of O
 }
 )+R(int shading(const int c, const float3 p, const float3 normal, const float* camera_cache) { // calculate flat shading color of triangle
 )+"#ifndef GRAPHICS_TRANSPARENCY"+R(
-	const float dis  = camera_cache[ 1]; // fetch camera parameters (rotation matrix, camera position, etc.)
-	const float posx = camera_cache[ 2]-def_domain_offset_x;
-	const float posy = camera_cache[ 3]-def_domain_offset_y;
-	const float posz = camera_cache[ 4]-def_domain_offset_z;
-	const float Rzx  = camera_cache[11];
-	const float Rzy  = camera_cache[12];
-	const float Rzz  = camera_cache[13];
-	const uchar cr=c>>16&255, cg=c>>8&255, cb=c&255;
+	const float zoom = camera_cache[ 0]; // fetch camera parameters (rotation matrix, camera position, etc.)
+	const float  dis = camera_cache[ 1];
+	const float3 pos = (float3)(camera_cache[ 2], camera_cache[ 3], camera_cache[ 4])-(float3)(def_domain_offset_x, def_domain_offset_y, def_domain_offset_z);
+	const float3 Rz  = (float3)(camera_cache[11], camera_cache[12], camera_cache[13]);
+	const float3 d = p-Rz*(dis/zoom)-pos; // distance vector between p and camera position
 	const float nl2 = sq(normal.x)+sq(normal.y)+sq(normal.z); // only one native_sqrt instead of two
-	const float dx = p.x-fma(Rzx, dis, posx); // direction of light source is viewing direction
-	const float dy = p.y-fma(Rzy, dis, posy);
-	const float dz = p.z-fma(Rzz, dis, posz);
-	const float dl2 = sq(dx)+sq(dy)+sq(dz);
-	const float br = max(1.5f*fabs(normal.x*dx+normal.y*dy+normal.z*dz)*rsqrt(nl2*dl2), 0.3f);
+	const float dl2 = sq(d.x)+sq(d.y)+sq(d.z);
+	const float br = max(1.5f*fabs(dot(normal, d))*rsqrt(nl2*dl2), 0.3f);
+	const float cr=(float)((c>>16)&255), cg=(float)((c>>8)&255), cb=(float)(c&255);
 	return min((int)(br*cr), 255)<<16|min((int)(br*cg), 255)<<8|min((int)(br*cb), 255);
 )+"#else"+R( // GRAPHICS_TRANSPARENCY
 	return c; // disable flat shading, just return input color
@@ -218,30 +213,20 @@ string opencl_c_container() { return R( // ########################## begin of O
 }
 )+R(bool convert(int* rx, int* ry, float* rz, const float3 p, const float* camera_cache, const int stereo) { // 3D -> 2D
 	const float zoom = camera_cache[0]; // fetch camera parameters (rotation matrix, camera position, etc.)
-	const float dis  = camera_cache[1];
-	const float posx = camera_cache[2];
-	const float posy = camera_cache[3];
-	const float posz = camera_cache[4];
-	const float Rxx  = camera_cache[5];
-	const float Rxy  = camera_cache[6];
-	const float Rxz  = camera_cache[7];
-	const float Ryx  = camera_cache[8];
-	const float Ryy  = camera_cache[9];
-	const float Ryz  = camera_cache[10];
-	const float Rzx  = camera_cache[11];
-	const float Rzy  = camera_cache[12];
-	const float Rzz  = camera_cache[13];
+	const float  dis = camera_cache[1];
+	const float3 pos = (float3)(camera_cache[ 2], camera_cache[ 3], camera_cache[ 4])-(float3)(def_domain_offset_x, def_domain_offset_y, def_domain_offset_z);
+	const float3 Rx  = (float3)(camera_cache[ 5], camera_cache[ 6], camera_cache[ 7]);
+	const float3 Ry  = (float3)(camera_cache[ 8], camera_cache[ 9], camera_cache[10]);
+	const float3 Rz  = (float3)(camera_cache[11], camera_cache[12], camera_cache[13]);
 	const float eye_distance = vload_half(28, (half*)camera_cache);
 	float3 t, r;
-	t.x = p.x+def_domain_offset_x-posx-(float)stereo*eye_distance/zoom*Rxx; // transformation
-	t.y = p.y+def_domain_offset_y-posy-(float)stereo*eye_distance/zoom*Rxy;
-	t.z = p.z+def_domain_offset_z-posz;
-	r.z = Rzx*t.x+Rzy*t.y+Rzz*t.z; // z-position for z-buffer
+	t = p-pos-((float)stereo*eye_distance/zoom)*(float3)(Rx.x, Rx.y, 0.0f); // transformation
+	r.z = dot(Rz, t); // z-position for z-buffer
 	const float rs = zoom*dis/(dis-r.z*zoom); // perspective (reciprocal is more efficient)
 	if(rs<=0.0f) return false; // point is behins camera
 	const float tv = ((as_int(camera_cache[14])>>30)&0x1)&&stereo!=0 ? 0.5f : 1.0f;
-	r.x = ((Rxx*t.x+Rxy*t.y+Rxz*t.z)*rs+(float)stereo*eye_distance)*tv+(0.5f+(float)stereo*0.25f)*(float)def_screen_width; // x position on screen
-	r.y =  (Ryx*t.x+Ryy*t.y+Ryz*t.z)*rs+0.5f*(float)def_screen_height; // y position on screen
+	r.x = (dot(Rx, t)*rs+(float)stereo*eye_distance)*tv+(0.5f+(float)stereo*0.25f)*(float)def_screen_width; // x position on screen
+	r.y =  dot(Ry, t)*rs+0.5f*(float)def_screen_height; // y position on screen
 	*rx = (int)(r.x+0.5f);
 	*ry = (int)(r.y+0.5f);
 	*rz = r.z;
@@ -296,7 +281,8 @@ string opencl_c_container() { return R( // ########################## begin of O
 	int r0x, r0y, r1x, r1y, r2x, r2y; float r0z, r1z, r2z;
 	if(convert(&r0x, &r0y, &r0z, p0, camera_cache, stereo) && convert(&r1x, &r1y, &r1z, p1, camera_cache, stereo) && convert(&r2x, &r2y, &r2z, p2, camera_cache, stereo)
 		&& !(is_off_screen(r0x, r0y, stereo) && is_off_screen(r1x, r1y, stereo) && is_off_screen(r2x, r2y, stereo))) { // cancel drawing if all points are off screen
-		if(r0x*(r1y-r2y)+r1x*(r2y-r0y)+r2x*(r0y-r1y)>100000 || (r0y==r1y&&r0y==r2y)) return; // return for large triangle area or degenerate triangles
+		if(r0x*(r1y-r2y)+r1x*(r2y-r0y)+r2x*(r0y-r1y)>40000 || (r0y==r1y&&r0y==r2y)) return; // return for large triangle area or degenerate triangles
+		//if(r1x*r0y+r2x*r1y+r0x*r2y>=r0x*r1y+r1x*r2y+r2x*r0y) return; // clockwise backface culling
 		if(r0y>r1y) { const int xt = r0x; const int yt = r0y; r0x = r1x; r0y = r1y; r1x = xt; r1y = yt; } // sort vertices ascending by y
 		if(r0y>r2y) { const int xt = r0x; const int yt = r0y; r0x = r2x; r0y = r2y; r2x = xt; r2y = yt; }
 		if(r1y>r2y) { const int xt = r1x; const int yt = r1y; r1x = r2x; r1y = r2y; r2x = xt; r2y = yt; }
@@ -321,7 +307,8 @@ string opencl_c_container() { return R( // ########################## begin of O
 	int r0x, r0y, r1x, r1y, r2x, r2y; float r0z, r1z, r2z;
 	if(convert(&r0x, &r0y, &r0z, p0, camera_cache, stereo) && convert(&r1x, &r1y, &r1z, p1, camera_cache, stereo) && convert(&r2x, &r2y, &r2z, p2, camera_cache, stereo)
 		&& !(is_off_screen(r0x, r0y, stereo) && is_off_screen(r1x, r1y, stereo) && is_off_screen(r2x, r2y, stereo))) { // cancel drawing if all points are off screen
-		if(r0x*(r1y-r2y)+r1x*(r2y-r0y)+r2x*(r0y-r1y)>100000 || (r0y==r1y&&r0y==r2y)) return; // return for large triangle area or degenerate triangles
+		if(r0x*(r1y-r2y)+r1x*(r2y-r0y)+r2x*(r0y-r1y)>40000 || (r0y==r1y&&r0y==r2y)) return; // return for large triangle area or degenerate triangles
+		//if(r1x*r0y+r2x*r1y+r0x*r2y>=r0x*r1y+r1x*r2y+r2x*r0y) return; // clockwise backface culling
 		if(r0y>r1y) { const int xt = r0x; const int yt = r0y; r0x = r1x; r0y = r1y; r1x = xt; r1y = yt; const int ct = c0; c0 = c1; c1 = ct; } // sort vertices ascending by y
 		if(r0y>r2y) { const int xt = r0x; const int yt = r0y; r0x = r2x; r0y = r2y; r2x = xt; r2y = yt; const int ct = c0; c0 = c2; c2 = ct; }
 		if(r1y>r2y) { const int xt = r1x; const int yt = r1y; r1x = r2x; r1y = r2y; r2x = xt; r2y = yt; const int ct = c1; c1 = c2; c2 = ct; }
@@ -618,35 +605,19 @@ string opencl_c_container() { return R( // ########################## begin of O
 }
 )+R(ray get_camray(const int x, const int y, const float* camera_cache) {
 	const float zoom = camera_cache[0]; // fetch camera parameters (rotation matrix, camera position, etc.)
-	const float dis  = camera_cache[1];
-	const float posx = camera_cache[2];
-	const float posy = camera_cache[3];
-	const float posz = camera_cache[4];
-	const float Rxx  = camera_cache[5];
-	const float Rxy  = camera_cache[6];
-	const float Rxz  = camera_cache[7];
-	const float Ryx  = camera_cache[8];
-	const float Ryy  = camera_cache[9];
-	const float Ryz  = camera_cache[10];
-	const float Rzx  = camera_cache[11];
-	const float Rzy  = camera_cache[12];
-	const float Rzz  = camera_cache[13];
-	const bool  vr  = (as_int(camera_cache[14])>>31)&0x1;
-	const float rtv = (as_int(camera_cache[14])>>30)&0x1 ? 2.0f : 1.0f;
-	const float eye_distance = vload_half(28, (half*)camera_cache);
-	const float stereo = (x<(int)def_screen_width/2 ? -1.0f : 1.0f);
+	const float  dis = camera_cache[1];
+	const float3 pos = (float3)(camera_cache[ 2], camera_cache[ 3], camera_cache[ 4])-(float3)(def_domain_offset_x, def_domain_offset_y, def_domain_offset_z);
+	const float3 Rx  = (float3)(camera_cache[ 5], camera_cache[ 6], camera_cache[ 7]);
+	const float3 Ry  = (float3)(camera_cache[ 8], camera_cache[ 9], camera_cache[10]);
+	const float3 Rz  = (float3)(camera_cache[11], camera_cache[12], camera_cache[13]);
+	const bool   vr  = (as_int(camera_cache[14])>>31)&0x1;
+	const float  rtv = (as_int(camera_cache[14])>>30)&0x1 ? 2.0f : 1.0f;
+	const float  eye_distance = vload_half(28, (half*)camera_cache);
+	const float  stereo = (x<(int)def_screen_width/2 ? -1.0f : 1.0f);
 	float3 p0 = (float3)(!vr ? 0.0f : stereo*eye_distance/zoom, 0.0f, dis/zoom);
 	float3 p1 = p0+normalize((float3)(!vr ? (float)(x-(int)def_screen_width/2) : ((float)(x-(int)def_screen_width/2)-stereo*(float)(def_screen_width/4u))*rtv-stereo*eye_distance, (float)(y-(int)def_screen_height/2), -dis));
-	const float x0 = Rxx*p0.x+Ryx*p0.y+Rzx*p0.z; // reverse rotate p0
-	const float y0 = Rxy*p0.x+Ryy*p0.y+Rzy*p0.z;
-	const float z0 = Rxz*p0.x+Ryz*p0.y+Rzz*p0.z;
-	const float x1 = Rxx*p1.x+Ryx*p1.y+Rzx*p1.z; // reverse rotate p1
-	const float y1 = Rxy*p1.x+Ryy*p1.y+Rzy*p1.z;
-	const float z1 = Rxz*p1.x+Ryz*p1.y+Rzz*p1.z;
-	p0 = (float3)(x0, y0, z0)-(float3)(def_domain_offset_x, def_domain_offset_y, def_domain_offset_z);
-	p1 = (float3)(x1, y1, z1)-(float3)(def_domain_offset_x, def_domain_offset_y, def_domain_offset_z);
-	p0.x=p0.x+posx; p0.y=p0.y+posy; p0.z=p0.z+posz; // reverse transformation of p0
-	p1.x=p1.x+posx; p1.y=p1.y+posy; p1.z=p1.z+posz; // reverse transformation of p1
+	p0 = Rx*p0.x+Ry*p0.y+Rz*p0.z+pos; // reverse rotation and reverse transformation of p0
+	p1 = Rx*p1.x+Ry*p1.y+Rz*p1.z+pos; // reverse rotation and reverse transformation of p1
 	ray camray;
 	camray.origin = p0;
 	camray.direction = p1-p0;
@@ -838,19 +809,37 @@ string opencl_c_container() { return R( // ########################## begin of O
 	return dot(point-plane_p, plane_n)<=0.0f;
 }
 )+R(bool is_in_camera_frustrum(const float3 p, const float* camera_cache) { // returns true if point is located in camera frustrum
-	const float vr = (float)((as_int(camera_cache[14])>>31)&0x1);
-	const ray r00 = get_camray(0,                       0                       , camera_cache); // get 4 edge vectors of frustrum
-	const ray r01 = get_camray((int)def_screen_width-1, 0                       , camera_cache);
-	const ray r10 = get_camray(0,                       (int)def_screen_height-1, camera_cache);
-	const ray r11 = get_camray((int)def_screen_width-1, (int)def_screen_height-1, camera_cache);
-	const float3 plane_n_top    = cross(r00.direction, r01.direction); // get 4 frustrum planes
-	const float3 plane_n_bottom = cross(r11.direction, r10.direction);
-	const float3 plane_n_left   = cross(r10.direction, r00.direction);
-	const float3 plane_n_right  = cross(r01.direction, r11.direction);
-	const float3 plane_p_top    = r00.origin-2.0f*plane_n_top; // move frustrum planes outward by 2 units
-	const float3 plane_p_bottom = r11.origin-2.0f*plane_n_bottom;
-	const float3 plane_p_left   = r00.origin-(2.0f+16.0f*vr)*plane_n_left; // move frustrum planes outward by 2 units, for stereoscopic rendering a bit more
-	const float3 plane_p_right  = r11.origin-(2.0f+16.0f*vr)*plane_n_right;
+	const float zoom = camera_cache[0]; // fetch camera parameters (rotation matrix, camera position, etc.)
+	const float  dis = camera_cache[1];
+	const float3 pos = (float3)(camera_cache[ 2], camera_cache[ 3], camera_cache[ 4])-(float3)(def_domain_offset_x, def_domain_offset_y, def_domain_offset_z);
+	const float3 Rx  = (float3)(camera_cache[ 5], camera_cache[ 6], camera_cache[ 7]);
+	const float3 Ry  = (float3)(camera_cache[ 8], camera_cache[ 9], camera_cache[10]);
+	const float3 Rz  = (float3)(camera_cache[11], camera_cache[12], camera_cache[13]);
+	const bool   vr  = (as_int(camera_cache[14])>>31)&0x1;
+	const float  rtv = (as_int(camera_cache[14])>>30)&0x1 ? 2.0f : 1.0f;
+	const float3 p0 = (float3)(0.0f, 0.0f, dis/zoom);
+	const float3 camera_center = Rx*p0.x+Ry*p0.y+Rz*p0.z+pos; // reverse rotation and reverse transformation of p0
+	const float x_left   = !vr ? (float)(-(int)def_screen_width/2  ) : ((float)(-(int)def_screen_width/2  )+(float)(def_screen_width/4u))*rtv;
+	const float x_right  = !vr ? (float)( (int)def_screen_width/2-1) : ((float)( (int)def_screen_width/2-1)-(float)(def_screen_width/4u))*rtv;
+	const float y_top    = (float)(-(int)def_screen_height/2 );
+	const float y_bottom = (float)((int)def_screen_height/2-1);
+	const float dis_clamped = fmin(dis, 1E4f); // avoid flickering at very small field of view
+	float3 r00 = p0+normalize((float3)(x_left , y_top   , -dis_clamped)); // get 4 edge vectors of frustrum, get_camray(...) inlined and redundant parts eliminated
+	float3 r01 = p0+normalize((float3)(x_right, y_top   , -dis_clamped));
+	float3 r10 = p0+normalize((float3)(x_left , y_bottom, -dis_clamped));
+	float3 r11 = p0+normalize((float3)(x_right, y_bottom, -dis_clamped));
+	r00 = Rx*r00.x+Ry*r00.y+Rz*r00.z+pos-camera_center; // reverse rotation and reverse transformation of r00
+	r01 = Rx*r01.x+Ry*r01.y+Rz*r01.z+pos-camera_center; // reverse rotation and reverse transformation of r01
+	r10 = Rx*r10.x+Ry*r10.y+Rz*r10.z+pos-camera_center; // reverse rotation and reverse transformation of r10
+	r11 = Rx*r11.x+Ry*r11.y+Rz*r11.z+pos-camera_center; // reverse rotation and reverse transformation of r11
+	const float3 plane_n_top    = cross(r00, r01); // get 4 frustrum planes
+	const float3 plane_n_bottom = cross(r11, r10);
+	const float3 plane_n_left   = cross(r10, r00);
+	const float3 plane_n_right  = cross(r01, r11);
+	const float3 plane_p_top    = camera_center-2.0f*plane_n_top; // move frustrum planes outward by 2 units
+	const float3 plane_p_bottom = camera_center-2.0f*plane_n_bottom;
+	const float3 plane_p_left   = camera_center-(2.0f+8.0f*(float)vr)*plane_n_left; // move frustrum planes outward by 2 units, for stereoscopic rendering a bit more
+	const float3 plane_p_right  = camera_center-(2.0f+8.0f*(float)vr)*plane_n_right;
 	return is_above_plane(p, plane_p_top, plane_n_top)&&is_above_plane(p, plane_p_bottom, plane_n_bottom)&&is_above_plane(p, plane_p_left, plane_n_left)&&is_above_plane(p, plane_p_right, plane_n_right);
 }
 )+"#endif"+R( // GRAPHICS
@@ -1140,7 +1129,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 
 )+"#ifdef MOVING_BOUNDARIES"+R(
 )+R(void apply_moving_boundaries(float* fhn, const uint* j, const global float* u, const global uchar* flags) { // apply Dirichlet velocity boundaries if necessary (Krueger p.180, rho_solid=1)
-	uint ji; // reads velocities of only neighboring boundary nodes, which do not change during simulation
+	uint ji; // reads velocities of only neighboring boundary cells, which do not change during simulation
 	for(uint i=1u; i<def_velocity_set; i+=2u) { // loop is entirely unrolled by compiler, no unnecessary memory access is happening
 		const float w6 = -6.0f*w(i); // w(i) = w(i+1) if i is odd
 		ji = j[i+1u]; fhn[i   ] = (flags[ji]&TYPE_BO)==TYPE_S ? fma(w6, c(i+1u)*u[ji]+c(def_velocity_set+i+1u)*u[def_N+(ulong)ji]+c(2u*def_velocity_set+i+1u)*u[2ul*def_N+(ulong)ji], fhn[i   ]) : fhn[i   ]; // boundary : regular
@@ -1150,7 +1139,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#endif"+R( // MOVING_BOUNDARIES
 
 )+"#ifdef SURFACE"+R(
-)+R(void average_neighbors_non_gas(const uint n, const global float* rho, const global float* u, const global uchar* flags, float* rhon, float* uxn, float* uyn, float* uzn) { // calculate average density and velocity of neighbors of node n
+)+R(void average_neighbors_non_gas(const uint n, const global float* rho, const global float* u, const global uchar* flags, float* rhon, float* uxn, float* uyn, float* uzn) { // calculate average density and velocity of neighbors of cell n
 	uint j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
 	float rhot=0.0f, uxt=0.0f, uyt=0.0f, uzt=0.0f, counter=0.0f; // average over all fluid/interface neighbors
@@ -1169,7 +1158,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	*uyn  = counter>0.0f ? uyt /counter : 0.0f;
 	*uzn  = counter>0.0f ? uzt /counter : 0.0f;
 }
-)+R(void average_neighbors_fluid(const uint n, const global float* rho, const global float* u, const global uchar* flags, float* rhon, float* uxn, float* uyn, float* uzn) { // calculate average density and velocity of neighbors of node n
+)+R(void average_neighbors_fluid(const uint n, const global float* rho, const global float* u, const global uchar* flags, float* rhon, float* uxn, float* uyn, float* uzn) { // calculate average density and velocity of neighbors of cell n
 	uint j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
 	float rhot=0.0f, uxt=0.0f, uyt=0.0f, uzt=0.0f, counter=0.0f; // average over all fluid/interface neighbors
@@ -1276,7 +1265,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	float3 p[24]; // number of neighboring interface points is less or equal than than 26 minus 1 gas and minus 1 fluid point = 24
 	const float center_offset = plic_cube(phij[0], bz); // calculate z-offset PLIC of center point only once
 	for(uint i=1u; i<27u; i++) { // iterate over neighbors, no loop unrolling here (50% better perfoemance without loop unrolling)
-		if(phij[i]>0.0f&&phij[i]<1.0f) { // limit neighbors to interface nodes
+		if(phij[i]>0.0f&&phij[i]<1.0f) { // limit neighbors to interface cells
 			const float3 ei = (float3)(c_D3Q27(i), c_D3Q27(27u+i), c_D3Q27(2u*27u+i)); // assume neighbor normal vector is the same as center normal vector
 			const float offset = plic_cube(phij[i], bz)-center_offset;
 			p[number++] = (float3)(dot(ei, bx), dot(ei, by), dot(ei, bz)+offset); // do coordinate system transformation into (x, y, f(x,y)) and apply PLIC pffsets
@@ -1306,7 +1295,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	float2 p[6]; // number of neighboring interface points is less or equal than than 8 minus 1 gas and minus 1 fluid point = 6
 	const float center_offset = plic_cube(phit[0], by); // calculate z-offset PLIC of center point only once
 	for(uint i=1u; i<9u; i++) { // iterate over neighbors, no loop unrolling here (50% better perfoemance without loop unrolling)
-		if(phit[i]>0.0f&&phit[i]<1.0f) { // limit neighbors to interface nodes
+		if(phit[i]>0.0f&&phit[i]<1.0f) { // limit neighbors to interface cells
 			const float3 ei = (float3)(c(i), c(9u+i), 0.0f); // assume neighbor normal vector is the same as center normal vector
 			const float offset = plic_cube(phit[i], by)-center_offset;
 			p[number++] = (float2)(dot(ei, bx), dot(ei, by)+offset); // do coordinate system transformation into (x, f(x)) and apply PLIC pffsets
@@ -1408,7 +1397,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	neighbors(n, j); // calculate neighbor indices
 	uchar flagsj[def_velocity_set]; // cache neighbor flags for multiple readings
 	for(uint i=1u; i<def_velocity_set; i++) flagsj[i] = flags[j[i]];
-	if(flagsn_bo==TYPE_S) { // node is solid
+	if(flagsn_bo==TYPE_S) { // cell is solid
 		bool TYPE_ONLY_S = true; // has only solid neighbors
 		for(uint i=1u; i<def_velocity_set; i++) TYPE_ONLY_S = TYPE_ONLY_S&&(flagsj[i]&TYPE_BO)==TYPE_S;
 		if(TYPE_ONLY_S) {
@@ -1428,7 +1417,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 		for(uint i=1u; i<def_velocity_set; i++) {
 			next_to_moving_boundary = next_to_moving_boundary||((flagsj[i]&TYPE_BO)==TYPE_S&&(u[j[i]]!=0.0f||u[def_N+(ulong)j[i]]!=0.0f||u[2ul*def_N+(ulong)j[i]]!=0.0f));
 		}
-		flags[n] = flagsn = next_to_moving_boundary ? flagsn|TYPE_MS : flagsn&~TYPE_MS; // mark/unmark nodes next to TYPE_S nodes with velocity!=0 with TYPE_MS
+		flags[n] = flagsn = next_to_moving_boundary ? flagsn|TYPE_MS : flagsn&~TYPE_MS; // mark/unmark cells next to TYPE_S cells with velocity!=0 with TYPE_MS
 )+"#endif"+R( // MOVING_BOUNDARIES
 	}
 	float feq[def_velocity_set]; // f_equilibrium
@@ -1437,24 +1426,24 @@ string opencl_c_container() { return R( // ########################## begin of O
 	{ // separate block to avoid variable name conflicts
 		float phin = phi[n];
 		if(!(flagsn&(TYPE_S|TYPE_E|TYPE_T|TYPE_F|TYPE_I))) flagsn = (flagsn&~TYPE_SU)|TYPE_G; // change all non-fluid and non-interface flags to gas
-		if((flagsn&TYPE_SU)==TYPE_G) { // node with updated flags is gas
-			bool change = false; // check if node has to be changed to interface
-			for(uint i=1u; i<def_velocity_set; i++) change = change||(flagsj[i]&TYPE_SU)==TYPE_F; // if neighbor flag fluid is set, the node must be interface
+		if((flagsn&TYPE_SU)==TYPE_G) { // cell with updated flags is gas
+			bool change = false; // check if cell has to be changed to interface
+			for(uint i=1u; i<def_velocity_set; i++) change = change||(flagsj[i]&TYPE_SU)==TYPE_F; // if neighbor flag fluid is set, the cell must be interface
 			if(change) { // create interface automatically if phi has not explicitely defined for the interface layer
-				flagsn = (flagsn&~TYPE_SU)|TYPE_I; // node must be interface
+				flagsn = (flagsn&~TYPE_SU)|TYPE_I; // cell must be interface
 				phin = 0.5f;
-				float rhon, uxn, uyn, uzn; // initialize interface nodes with average density/velocity of fluid neighbors
+				float rhon, uxn, uyn, uzn; // initialize interface cells with average density/velocity of fluid neighbors
 				average_neighbors_fluid(n, rho, u, flags, &rhon, &uxn, &uyn, &uzn); // get average rho/u from all fluid neighbors
 				calculate_f_eq(rhon, uxn, uyn, uzn, feq); // calculate equilibrium DDFs
 			}
 		}
-		if((flagsn&TYPE_SU)==TYPE_G) { // node with updated flags is still gas
-			u[                 n] = 0.0f; // reset velocity for gas nodes
+		if((flagsn&TYPE_SU)==TYPE_G) { // cell with updated flags is still gas
+			u[                 n] = 0.0f; // reset velocity for gas cells
 			u[    def_N+(ulong)n] = 0.0f;
 			u[2ul*def_N+(ulong)n] = 0.0f;
 			phin = 0.0f;
 		} else if((flagsn&TYPE_SU)==TYPE_I && (phin<0.0f||phin>1.0f)) {
-			phin = 0.5f; // node should be interface, but phi was invalid
+			phin = 0.5f; // cell should be interface, but phi was invalid
 		} else if((flagsn&TYPE_SU)==TYPE_F) {
 			phin = 1.0f;
 		}
@@ -1477,7 +1466,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 } // initialize()
 
 )+"#ifdef MOVING_BOUNDARIES"+R(
-)+R(kernel void update_moving_boundaries(const global float* u, global uchar* flags) { // mark/unmark nodes next to TYPE_S nodes with velocity!=0 with TYPE_MS
+)+R(kernel void update_moving_boundaries(const global float* u, global uchar* flags) { // mark/unmark cells next to TYPE_S cells with velocity!=0 with TYPE_MS
 	const uint n = get_global_id(0); // n = x+(y+z*Ny)*Nx
 	if(n>=(uint)def_N||is_halo(n)) return; // don't execute update_moving_boundaries() on halo
 	const uchar flagsn = flags[n];
@@ -1491,7 +1480,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 		for(uint i=1u; i<def_velocity_set; i++) {
 			next_to_moving_boundary = next_to_moving_boundary||((u[j[i]]!=0.0f||u[def_N+(ulong)j[i]]!=0.0f||u[2ul*def_N+(ulong)j[i]]!=0.0f)&&(flagsj[i]&TYPE_BO)==TYPE_S);
 		}
-		flags[n] = next_to_moving_boundary ? flagsn|TYPE_MS : flagsn&~TYPE_MS; // mark/unmark nodes next to TYPE_S nodes with velocity!=0 with TYPE_MS
+		flags[n] = next_to_moving_boundary ? flagsn|TYPE_MS : flagsn&~TYPE_MS; // mark/unmark cells next to TYPE_S cells with velocity!=0 with TYPE_MS
 	}
 } // update_moving_boundaries()
 )+"#endif"+R( // MOVING_BOUNDARIES
@@ -1513,7 +1502,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	if(n>=(uint)def_N||is_halo(n)) return; // don't execute stream_collide() on halo
 	const uchar flagsn = flags[n]; // cache flags[n] for multiple readings
 	const uchar flagsn_bo=flagsn&TYPE_BO, flagsn_su=flagsn&TYPE_SU; // extract boundary and surface flags
-	if(flagsn_bo==TYPE_S||flagsn_su==TYPE_G) return; // if node is solid boundary or gas, just return
+	if(flagsn_bo==TYPE_S||flagsn_su==TYPE_G) return; // if cell is solid boundary or gas, just return
 
 	uint j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
@@ -1522,7 +1511,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	load_f(n, fhn, fi, j, t); // perform streaming (part 2)
 
 )+"#ifdef MOVING_BOUNDARIES"+R(
-	if(flagsn_bo==TYPE_MS) apply_moving_boundaries(fhn, j, u, flags); // apply Dirichlet velocity boundaries if necessary (reads velocities of only neighboring boundary nodes, which do not change during simulation)
+	if(flagsn_bo==TYPE_MS) apply_moving_boundaries(fhn, j, u, flags); // apply Dirichlet velocity boundaries if necessary (reads velocities of only neighboring boundary cells, which do not change during simulation)
 )+"#endif"+R( // MOVING_BOUNDARIES
 
 	float rhon, uxn, uyn, uzn; // calculate local density and velocity for collision
@@ -1550,7 +1539,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#endif"+R( // FORCE_FIELD
 
 )+"#ifdef SURFACE"+R(
-	if(flagsn_su==TYPE_I) { // node was interface, eventually initiate flag change
+	if(flagsn_su==TYPE_I) { // cell was interface, eventually initiate flag change
 		bool TYPE_NO_F=true, TYPE_NO_G=true; // temporary flags for no fluid or gas neighbors
 		for(uint i=1u; i<def_velocity_set; i++) {
 			const uchar flagsji_su = flags[j[i]]&TYPE_SU; // extract SURFACE flags
@@ -1618,7 +1607,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+"#endif"+R( // UPDATE_FIELDS
 )+"#else"+R( // EQUILIBRIUM_BOUNDARIES
 )+"#ifdef UPDATE_FIELDS"+R(
-	if(flagsn_bo!=TYPE_E) { // only update fields for non-TYPE_E nodes
+	if(flagsn_bo!=TYPE_E) { // only update fields for non-TYPE_E cells
 		rho[               n] = rhon; // update density field
 		u[                 n] = uxn; // update velocity field
 		u[    def_N+(ulong)n] = uyn;
@@ -1696,7 +1685,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	if(n>=(uint)def_N||is_halo(n)) return; // don't execute surface_0() on halo
 	const uchar flagsn = flags[n]; // cache flags[n] for multiple readings
 	const uchar flagsn_bo=flagsn&TYPE_BO, flagsn_su=flagsn&TYPE_SU; // extract boundary and surface flags
-	if(flagsn_bo==TYPE_S||flagsn_su==TYPE_G) return; // node processed here is fluid or interface
+	if(flagsn_bo==TYPE_S||flagsn_su==TYPE_G) return; // cell processed here is fluid or interface
 
 	uint j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
@@ -1710,9 +1699,9 @@ string opencl_c_container() { return R( // ########################## begin of O
 	for(uint i=1u; i<def_velocity_set; i++) {
 		massn += massex[j[i]]; // distribute excess mass from last step which is stored in neighbors
 	}
-	if(flagsn_su==TYPE_F) { // node is fluid
-		for(uint i=1u; i<def_velocity_set; i++) massn += fhn[i]-fon[i]; // neighbor is fluid or interface node
-	} else if(flagsn_su==TYPE_I) { // node is interface
+	if(flagsn_su==TYPE_F) { // cell is fluid
+		for(uint i=1u; i<def_velocity_set; i++) massn += fhn[i]-fon[i]; // neighbor is fluid or interface cell
+	} else if(flagsn_su==TYPE_I) { // cell is interface
 		float phij[def_velocity_set]; // cache fill level of neighbor lattice points
 		for(uint i=1u; i<def_velocity_set; i++) phij[i] = phi[j[i]]; // cache fill level of neighbor lattice points
 		float rhon, uxn, uyn, uzn, rho_laplace=0.0f; // no surface tension if rho_laplace is not overwritten later
@@ -1741,8 +1730,8 @@ string opencl_c_container() { return R( // ########################## begin of O
 		calculate_f_eq(1.0f-rho_laplace, uxntmp, uyntmp, uzntmp, feg); // calculate gas equilibrium DDFs with constant ambient pressure
 		uchar flagsj_su[def_velocity_set]; // cache neighbor flags for multiple readings
 		for(uint i=1u; i<def_velocity_set; i++) flagsj_su[i] = flags[j[i]]&TYPE_SU;
-		for(uint i=1u; i<def_velocity_set; i+=2u) { // calculate mass exchange between current node and fluid/interface nodes
-			massn += flagsj_su[i   ]&(TYPE_F|TYPE_I) ? flagsj_su[i   ]==TYPE_F ? fhn[i+1]-fon[i   ] : 0.5f*(phij[i   ]+phij[0])*(fhn[i+1 ]-fon[i   ]) : 0.0f; // neighbor is fluid or interface node
+		for(uint i=1u; i<def_velocity_set; i+=2u) { // calculate mass exchange between current cell and fluid/interface cells
+			massn += flagsj_su[i   ]&(TYPE_F|TYPE_I) ? flagsj_su[i   ]==TYPE_F ? fhn[i+1]-fon[i   ] : 0.5f*(phij[i   ]+phij[0])*(fhn[i+1 ]-fon[i   ]) : 0.0f; // neighbor is fluid or interface cell
 			massn += flagsj_su[i+1u]&(TYPE_F|TYPE_I) ? flagsj_su[i+1u]==TYPE_F ? fhn[i  ]-fon[i+1u] : 0.5f*(phij[i+1u]+phij[0])*(fhn[i   ]-fon[i+1u]) : 0.0f; // fluid : interface : gas
 		}
 		for(uint i=1u; i<def_velocity_set; i+=2u) { // calculate reconstructed gas DDFs
@@ -1753,7 +1742,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	}
 	mass[n] = massn;
 }
-)+R(kernel void surface_1(global uchar* flags) { // prevent neighbors from interface->fluid nodes to become/be gas nodes
+)+R(kernel void surface_1(global uchar* flags) { // prevent neighbors from interface->fluid cells to become/be gas cells
 	const uint n = get_global_id(0); // n = x+(y+z*Ny)*Nx
 	if(n>=(uint)def_N) return; // execute surface_1() also on halo
 	const uchar flagsn_sus = flags[n]&(TYPE_SU|TYPE_S); // extract SURFACE flags
@@ -1764,8 +1753,8 @@ string opencl_c_container() { return R( // ########################## begin of O
 			const uchar flagsji = flags[j[i]];
 			const uchar flagsji_su = flagsji&(TYPE_SU|TYPE_S); // extract SURFACE flags
 			const uchar flagsji_r = flagsji&~TYPE_SU; // extract all non-SURFACE flags
-			if(flagsji_su==TYPE_IG) flags[j[i]] = flagsji_r|TYPE_I; // prevent interface neighbor nodes from becoming gas
-			else if(flagsji_su==TYPE_G) flags[j[i]] = flagsji_r|TYPE_GI; // neighbor node was gas and must change to interface
+			if(flagsji_su==TYPE_IG) flags[j[i]] = flagsji_r|TYPE_I; // prevent interface neighbor cells from becoming gas
+			else if(flagsji_su==TYPE_G) flags[j[i]] = flagsji_r|TYPE_GI; // neighbor cell was gas and must change to interface
 		}
 	}
 } // possible types at the end of surface_1(): TYPE_F / TYPE_I / TYPE_G / TYPE_IF / TYPE_IG / TYPE_GI
@@ -1773,7 +1762,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint n = get_global_id(0); // n = x+(y+z*Ny)*Nx
 	if(n>=(uint)def_N) return; // execute surface_2() also on halo
 	const uchar flagsn_sus = flags[n]&(TYPE_SU|TYPE_S); // extract SURFACE flags
-	if(flagsn_sus==TYPE_GI) { // initialize the fi of gas nodes that should become interface
+	if(flagsn_sus==TYPE_GI) { // initialize the fi of gas cells that should become interface
 		float rhon, uxn, uyn, uzn; // average over all fluid/interface neighbors
 		average_neighbors_non_gas(n, rho, u, flags, &rhon, &uxn, &uyn, &uzn); // get average rho/u from all fluid/interface neighbors
 		float feq[def_velocity_set];
@@ -1799,37 +1788,37 @@ string opencl_c_container() { return R( // ########################## begin of O
 	if(n>=(uint)def_N||is_halo(n)) return; // don't execute surface_3() on halo
 	const uchar flagsn_sus = flags[n]&(TYPE_SU|TYPE_S); // extract SURFACE flags
 	if(flagsn_sus&TYPE_S) return;
-	const float rhon = rho[n]; // density of node n
-	float massn = mass[n]; // mass of node n
-	float massexn = 0.0f; // excess mass of node n
+	const float rhon = rho[n]; // density of cell n
+	float massn = mass[n]; // mass of cell n
+	float massexn = 0.0f; // excess mass of cell n
 	float phin = 0.0f;
-	if(flagsn_sus==TYPE_F) { // regular fluid node
+	if(flagsn_sus==TYPE_F) { // regular fluid cell
 		massexn = massn-rhon; // dump mass-rho difference into excess mass
-		massn = rhon; // fluid node mass has to equal rho
+		massn = rhon; // fluid cell mass has to equal rho
 		phin = 1.0f;
-	} else if(flagsn_sus==TYPE_I) { // regular interface node
-		massexn = massn>rhon ? massn-rhon : massn<0.0f ? massn : 0.0f; // allow interface nodes with mass>rho or mass<0
+	} else if(flagsn_sus==TYPE_I) { // regular interface cell
+		massexn = massn>rhon ? massn-rhon : massn<0.0f ? massn : 0.0f; // allow interface cells with mass>rho or mass<0
 		massn = clamp(massn, 0.0f, rhon);
-		phin = calculate_phi(rhon, massn, TYPE_I); // calculate fill level for next step (only necessary for interface nodes)
-	} else if(flagsn_sus==TYPE_G) { // regular gas node
+		phin = calculate_phi(rhon, massn, TYPE_I); // calculate fill level for next step (only necessary for interface cells)
+	} else if(flagsn_sus==TYPE_G) { // regular gas cell
 		massexn = massn; // dump remaining mass into excess mass
 		massn = 0.0f;
 		phin = 0.0f;
 	} else if(flagsn_sus==TYPE_IF) { // flag interface->fluid is set
-		flags[n] = (flags[n]&~TYPE_SU)|TYPE_F; // node becomes fluid
+		flags[n] = (flags[n]&~TYPE_SU)|TYPE_F; // cell becomes fluid
 		massexn = massn-rhon; // dump mass-rho difference into excess mass
-		massn = rhon; // fluid node mass has to equal rho
-		phin = 1.0f; // set phi[n] to 1.0f for fluid nodes
+		massn = rhon; // fluid cell mass has to equal rho
+		phin = 1.0f; // set phi[n] to 1.0f for fluid cells
 	} else if(flagsn_sus==TYPE_IG) { // flag interface->gas is set
-		flags[n] = (flags[n]&~TYPE_SU)|TYPE_G; // node becomes gas
+		flags[n] = (flags[n]&~TYPE_SU)|TYPE_G; // cell becomes gas
 		massexn = massn; // dump remaining mass into excess mass
 		massn = 0.0f; // gas mass has to be zero
-		phin = 0.0f; // set phi[n] to 0.0f for gas nodes
+		phin = 0.0f; // set phi[n] to 0.0f for gas cells
 	} else if(flagsn_sus==TYPE_GI) { // flag gas->interface is set
-		flags[n] = (flags[n]&~TYPE_SU)|TYPE_I; // node becomes interface
-		massexn = massn>rhon ? massn-rhon : massn<0.0f ? massn : 0.0f; // allow interface nodes with mass>rho or mass<0
+		flags[n] = (flags[n]&~TYPE_SU)|TYPE_I; // cell becomes interface
+		massexn = massn>rhon ? massn-rhon : massn<0.0f ? massn : 0.0f; // allow interface cells with mass>rho or mass<0
 		massn = clamp(massn, 0.0f, rhon);
-		phin = calculate_phi(rhon, massn, TYPE_I); // calculate fill level for next step (only necessary for interface nodes)
+		phin = calculate_phi(rhon, massn, TYPE_I); // calculate fill level for next step (only necessary for interface cells)
 	}
 	uint j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
@@ -1838,7 +1827,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 		const uchar flagsji_su = flags[j[i]]&(TYPE_SU|TYPE_S); // extract SURFACE flags
 		counter += (uint)(flagsji_su==TYPE_F||flagsji_su==TYPE_I||flagsji_su==TYPE_IF||flagsji_su==TYPE_GI); // avoid branching
 	}
-	massn += counter>0u ? 0.0f : massexn; // if excess mass can't be distributed to neighboring interface or fluid nodes, add it to local mass (ensure mass conservation)
+	massn += counter>0u ? 0.0f : massexn; // if excess mass can't be distributed to neighboring interface or fluid cells, add it to local mass (ensure mass conservation)
 	massexn = counter>0u ? massexn/(float)counter : 0.0f; // divide excess mass up for all interface or fluid neighbors
 	mass[n] = massn; // update mass
 	massex[n] = massexn; // update excess mass
@@ -1866,7 +1855,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	load_f(n, fhn, fi, j, t); // perform streaming (part 2)
 
 )+"#ifdef MOVING_BOUNDARIES"+R(
-	if(flagsn_bo==TYPE_MS) apply_moving_boundaries(fhn, j, u, flags); // apply Dirichlet velocity boundaries if necessary (reads velocities of only neighboring boundary nodes, which do not change during simulation)
+	if(flagsn_bo==TYPE_MS) apply_moving_boundaries(fhn, j, u, flags); // apply Dirichlet velocity boundaries if necessary (reads velocities of only neighboring boundary cells, which do not change during simulation)
 )+"#endif"+R( // MOVING_BOUNDARIES
 
 	float rhon, uxn, uyn, uzn; // calculate local density and velocity for collision
@@ -1921,7 +1910,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	u[    def_N+(ulong)n] = uyn;
 	u[2ul*def_N+(ulong)n] = uzn;
 )+"#else"+R( // EQUILIBRIUM_BOUNDARIES
-	if(flagsn_bo!=TYPE_E) { // only update fields for non-TYPE_E nodes
+	if(flagsn_bo!=TYPE_E) { // only update fields for non-TYPE_E cells
 		rho[               n] = rhon; // update density field
 		u[                 n] = uxn; // update velocity field
 		u[    def_N+(ulong)n] = uyn;
@@ -1934,14 +1923,14 @@ string opencl_c_container() { return R( // ########################## begin of O
 )+R(kernel void calculate_force_on_boundaries(const global fpxx* fi, const global uchar* flags, const ulong t, global float* F) { // calculate force from the fluid on solid boundaries from fi directly
 	const uint n = get_global_id(0); // n = x+(y+z*Ny)*Nx
 	if(n>=(uint)def_N||is_halo(n)) return; // don't execute calculate_force_on_boundaries() on halo
-	if((flags[n]&TYPE_BO)!=TYPE_S) return; // only continue for solid boundary nodes
+	if((flags[n]&TYPE_BO)!=TYPE_S) return; // only continue for solid boundary cells
 	uint j[def_velocity_set]; // neighbor indices
 	neighbors(n, j); // calculate neighbor indices
 	float fhn[def_velocity_set]; // local DDFs
 	load_f(n, fhn, fi, j, t); // perform streaming (part 2)
 	float Fb=1.0f, fx=0.0f, fy=0.0f, fz=0.0f;
 	calculate_rho_u(fhn, &Fb, &fx, &fy, &fz); // abuse calculate_rho_u() method for calculating force
-	F[                 n] = 2.0f*fx*Fb; // 2 times because fi are reflected on solid boundary nodes (bounced-back)
+	F[                 n] = 2.0f*fx*Fb; // 2 times because fi are reflected on solid boundary cells (bounced-back)
 	F[    def_N+(ulong)n] = 2.0f*fy*Fb;
 	F[2ul*def_N+(ulong)n] = 2.0f*fz*Fb;
 } // calculate_force_on_boundaries()
@@ -2044,26 +2033,26 @@ string opencl_c_container() { return R( // ########################## begin of O
 		3,  5,  8, // yp
 		4,  6,  7  // ym
 )+"#elif defined(D3Q15)"+R(
-		1,  7,  9, 11, 14, // xp
-		2,  8, 10, 12, 13, // xm
-		3,  7,  9, 12, 13, // yp
-		4,  8, 10, 11, 14, // ym
+		1,  7, 14,  9, 11, // xp
+		2,  8, 13, 10, 12, // xm
+		3,  7, 12,  9, 13, // yp
+		4,  8, 11, 10, 14, // ym
 		5,  7, 10, 11, 13, // zp
 		6,  8,  9, 12, 14  // zm
 )+"#elif defined(D3Q19)"+R(
-		1,  7,  9, 13, 15, // xp
-		2,  8, 10, 14, 16, // xm
-		3,  7, 11, 14, 17, // yp
-		4,  8, 12, 13, 18, // ym
-		5,  9, 11, 16, 18, // zp
-		6, 10, 12, 15, 17  // zm
+		1,  7, 13,  9, 15, // xp
+		2,  8, 14, 10, 16, // xm
+		3,  7, 14, 11, 17, // yp
+		4,  8, 13, 12, 18, // ym
+		5,  9, 16, 11, 18, // zp
+		6, 10, 15, 12, 17  // zm
 )+"#elif defined(D3Q27)"+R(
-		1,  7,  9, 13, 15, 19, 21, 23, 26, // xp
-		2,  8, 10, 14, 16, 20, 22, 24, 25, // xm
-		3,  7, 11, 14, 17, 19, 21, 24, 25, // yp
-		4,  8, 12, 13, 18, 20, 22, 23, 26, // ym
-		5,  9, 11, 16, 18, 19, 22, 23, 25, // zp
-		6, 10, 12, 15, 17, 20, 21, 24, 26  // zm
+		1,  7, 13,  9, 15, 19, 26, 21, 23, // xp
+		2,  8, 14, 10, 16, 20, 25, 22, 24, // xm
+		3,  7, 14, 11, 17, 19, 24, 21, 25, // yp
+		4,  8, 13, 12, 18, 20, 23, 22, 26, // ym
+		5,  9, 16, 11, 18, 19, 22, 23, 25, // zp
+		6, 10, 15, 12, 17, 20, 21, 24, 26  // zm
 )+"#endif"+R( // D3Q27
 	};
 	return (uint)index_transfer_data[side_i];
@@ -2226,7 +2215,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 				intersections_check++; // cast a second ray to check if starting point is really inside (error correction)
 			}
 		}
-	} /**/
+	}
 
 	for(int i=1; i<(int)intersections; i++) { // insertion-sort distances
 		ushort t = distances[i];
@@ -2241,7 +2230,7 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const bool set_u = sq(ux)+sq(uy)+sq(uz)+sq(rx)+sq(ry)+sq(rz)>0.0f;
 	uint intersection = intersections%2u!=intersections_check%2u; // iterate through column, start with 0 regularly, start with 1 if forward and backward intersection count evenness differs (error correction)
 	const uint h0 = direction==0u ? xyz.x : direction==1u ? xyz.y : xyz.z;
-	const uint hmax = direction==0u ? (uint)clamp((int)x1-def_Ox, 0, (int)def_Nx-1) : direction==1u ? (uint)clamp((int)y1-def_Oy, 0, (int)def_Ny-1) : (uint)clamp((int)z1-def_Oz, 0, (int)def_Nz-1);
+	const uint hmax = direction==0u ? (uint)clamp((int)x1-def_Ox, 0, (int)def_Nx) : direction==1u ? (uint)clamp((int)y1-def_Oy, 0, (int)def_Ny) : (uint)clamp((int)z1-def_Oz, 0, (int)def_Nz);
 	const uint hmesh = h0+(uint)distances[intersections-1u];
 	for(uint h=h0; h<hmax; h++) {
 		while(intersection<intersections&&h>h0+(uint)distances[intersection]) {
@@ -2302,14 +2291,15 @@ string opencl_c_container() { return R( // ########################## begin of O
 	if(n>=(uint)def_N||is_halo(n)) return; // don't execute graphics_flags() on halo
 	const uchar flagsn = flags[n]; // cache flags
 	const uchar flagsn_bo = flagsn&TYPE_BO; // extract boundary flags
-	if(flagsn==0u||flagsn==TYPE_G) return; // don't draw regular fluid nodes
+	if(flagsn==0u||flagsn==TYPE_G) return; // don't draw regular fluid cells
 	//if(flagsn&TYPE_SU) return; // don't draw surface
 	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
 	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
-	uint x0, xp, xm, y0, yp, ym, z0, zp, zm;
-	calculate_indices(n, &x0, &xp, &xm, &y0, &yp, &ym, &z0, &zp, &zm);
 	const uint3 xyz = coordinates(n);
 	const float3 p = position(xyz);
+	if(!is_in_camera_frustrum(p, camera_cache)) return; // skip loading LBM data if grid cell is not visible
+	uint x0, xp, xm, y0, yp, ym, z0, zp, zm;
+	calculate_indices(n, &x0, &xp, &xm, &y0, &yp, &ym, &z0, &zp, &zm);
 	const int c =  // coloring scheme
 		flagsn_bo==TYPE_S ? COLOR_S : // solid boundary
 		((flagsn&TYPE_T)&&flagsn_bo==TYPE_E) ? color_average(COLOR_T, COLOR_E) : // both temperature boundary and equilibrium boundary
@@ -2321,8 +2311,8 @@ string opencl_c_container() { return R( // ########################## begin of O
 		flagsn&TYPE_I ? COLOR_I : // interface
 		flagsn&TYPE_X ? COLOR_X : // reserved type X
 		flagsn&TYPE_Y ? COLOR_Y : // reserved type Y
-		COLOR_0; // regular or gas node
-	//draw_point(p, c, camera_cache, bitmap, zbuffer); // draw one pixel for every boundary node
+		COLOR_0; // regular or gas cell
+	//draw_point(p, c, camera_cache, bitmap, zbuffer); // draw one pixel for every boundary cell
 	uint t;
 	t = xp+y0+z0; const bool not_xp = xyz.x<def_Nx-1u && flagsn==flags[t] && !is_halo(t); // +00
 	t = xm+y0+z0; const bool not_xm = xyz.x>       0u && flagsn==flags[t] && !is_halo(t); // -00
@@ -2372,6 +2362,10 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint3 xyz = coordinates(n);
 	if(xyz.x>=def_Nx-1u||xyz.y>=def_Ny-1u||xyz.z>=def_Nz-1u) return;
 	//if(xyz.x==0u||xyz.y==0u||xyz.z==0u||xyz.x>=def_Nx-2u||xyz.y>=def_Ny-2u||xyz.z>=def_Nz-2u) return;
+	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
+	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
+	const float3 p = position(xyz);
+	if(!is_in_camera_frustrum(p, camera_cache)) return; // skip loading LBM data if grid cell is not visible
 	uint j[8];
 	const uint x0 =  xyz.x; // cube stencil
 	const uint xp =  xyz.x+1u;
@@ -2392,9 +2386,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 	float3 triangles[15]; // maximum of 5 triangles with 3 vertices each
 	const uint tn = marching_cubes(v, 0.5f, triangles); // run marching cubes algorithm
 	if(tn==0u) return;
-	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
-	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
-	const float3 offset = (float3)((float)xyz.x+0.5f-0.5f*(float)def_Nx, (float)xyz.y+0.5f-0.5f*(float)def_Ny, (float)xyz.z+0.5f-0.5f*(float)def_Nz);
 )+"#ifdef FORCE_FIELD"+R(
 	float3 Fj[8];
 	for(uint i=0u; i<8u; i++) Fj[i] = v[i]==1.0f ? (float3)(F[j[i]], F[def_N+(ulong)j[i]], F[2ul*def_N+(ulong)j[i]]) : (float3)(0.0f, 0.0f, 0.0f);
@@ -2408,20 +2399,20 @@ string opencl_c_container() { return R( // ########################## begin of O
 		int c0, c1, c2; {
 			const float x1=p0.x, y1=p0.y, z1=p0.z, x0=1.0f-x1, y0=1.0f-y1, z0=1.0f-z1; // calculate interpolation factors
 			const float3 Fi = (x0*y0*z0)*Fj[0]+(x1*y0*z0)*Fj[1]+(x1*y0*z1)*Fj[2]+(x0*y0*z1)*Fj[3]+(x0*y1*z0)*Fj[4]+(x1*y1*z0)*Fj[5]+(x1*y1*z1)*Fj[6]+(x0*y1*z1)*Fj[7]; // perform trilinear interpolation
-			c0 = shading(rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal)), p0+offset, normal, camera_cache); // rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal));
+			c0 = shading(rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal)), p+p0, normal, camera_cache); // rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal));
 		} {
 			const float x1=p1.x, y1=p1.y, z1=p1.z, x0=1.0f-x1, y0=1.0f-y1, z0=1.0f-z1; // calculate interpolation factors
 			const float3 Fi = (x0*y0*z0)*Fj[0]+(x1*y0*z0)*Fj[1]+(x1*y0*z1)*Fj[2]+(x0*y0*z1)*Fj[3]+(x0*y1*z0)*Fj[4]+(x1*y1*z0)*Fj[5]+(x1*y1*z1)*Fj[6]+(x0*y1*z1)*Fj[7]; // perform trilinear interpolation
-			c1 = shading(rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal)), p1+offset, normal, camera_cache); // rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal));
+			c1 = shading(rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal)), p+p1, normal, camera_cache); // rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal));
 		} {
 			const float x1=p2.x, y1=p2.y, z1=p2.z, x0=1.0f-x1, y0=1.0f-y1, z0=1.0f-z1; // calculate interpolation factors
 			const float3 Fi = (x0*y0*z0)*Fj[0]+(x1*y0*z0)*Fj[1]+(x1*y0*z1)*Fj[2]+(x0*y0*z1)*Fj[3]+(x0*y1*z0)*Fj[4]+(x1*y1*z0)*Fj[5]+(x1*y1*z1)*Fj[6]+(x0*y1*z1)*Fj[7]; // perform trilinear interpolation
-			c2 = shading(rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal)), p2+offset, normal, camera_cache); // rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal));
+			c2 = shading(rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal)), p+p2, normal, camera_cache); // rainbow_color(191.0f+255.0f*def_scale_F*dot(Fi, normal));
 		}
-		draw_triangle_interpolated(p0+offset, p1+offset, p2+offset, c0, c1, c2, camera_cache, bitmap, zbuffer); // draw triangle with interpolated colors
+		draw_triangle_interpolated(p+p0, p+p1, p+p2, c0, c1, c2, camera_cache, bitmap, zbuffer); // draw triangle with interpolated colors
 )+"#else"+R( // FORCE_FIELD
-		const int c = shading(0xDFDFDF, (p0+p1+p2)/3.0f+offset, normal, camera_cache); // 0xDFDFDF;
-		draw_triangle(p0+offset, p1+offset, p2+offset, c, camera_cache, bitmap, zbuffer);
+		const int c = shading(0xDFDFDF, p+(p0+p1+p2)/3.0f, normal, camera_cache); // 0xDFDFDF;
+		draw_triangle(p+p0, p+p1, p+p2, c, camera_cache, bitmap, zbuffer);
 )+"#endif"+R( // FORCE_FIELD
 	}
 }
@@ -2432,6 +2423,10 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint3 xyz = coordinates(n);
 	const bool rx=(int)xyz.x!=slice_x, ry=(int)xyz.y!=slice_y, rz=(int)xyz.z!=slice_z;
 	if((slice_mode==1&&rx)||(slice_mode==2&&ry)||(slice_mode==3&&rz)||(slice_mode==4&&rx&&rz)||(slice_mode==5&&rx&&ry&&rz)||(slice_mode==6&&ry&&rz)||(slice_mode==7&&rx&&ry)) return;
+	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
+	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
+	const float3 p = position(xyz);
+	if(!is_in_camera_frustrum(p, camera_cache)) return; // skip loading LBM data if grid cell is not visible
 )+"#ifndef MOVING_BOUNDARIES"+R(
 	if(flags[n]&(TYPE_S|TYPE_E|TYPE_I|TYPE_G)) return;
 )+"#else"+R( // EQUILIBRIUM_BOUNDARIES
@@ -2440,9 +2435,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 	float3 un = load_u(n, u); // cache velocity
 	const float ul = length(un);
 	if(def_scale_u*ul<0.1f) return; // don't draw lattice points where the velocity is lower than this threshold
-	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
-	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
-	const float3 p = position(coordinates(n));
 	const int c = iron_color(255.0f*def_scale_u*ul); // coloring by velocity
 	draw_line(p-(0.5f/ul)*un, p+(0.5f/ul)*un, c, camera_cache, bitmap, zbuffer);
 }
@@ -2468,11 +2460,11 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint x = n%(def_Nx/def_streamline_sparse);
 	float3 p = ((float3)((float)def_streamline_sparse*((float)x+0.5f), (float)def_streamline_sparse*((float)y+0.5f), 0.5f))-0.5f*((float3)((float)def_Nx, (float)def_Ny, (float)def_Nz));
 	const bool rx=fabs(p.x-slice.x)>0.5f*(float)def_streamline_sparse, ry=fabs(p.y-slice.y)>0.5f*(float)def_streamline_sparse, rz=true;
-	)+"#endif"+R( // D2Q9
+)+"#endif"+R( // D2Q9
 	if((slice_mode==1&&rx)||(slice_mode==2&&ry)||(slice_mode==3&&rz)||(slice_mode==4&&rx&&rz)||(slice_mode==5&&rx&&ry&&rz)||(slice_mode==6&&ry&&rz)||(slice_mode==7&&rx&&ry)) return;
-	if((slice_mode==1||slice_mode==5||slice_mode==4||slice_mode==7)&&!rx) p.x = slice.x; // snap streamline position to slice position
-	if((slice_mode==2||slice_mode==5||slice_mode==6||slice_mode==7)&&!ry) p.y = slice.y;
-	if((slice_mode==3||slice_mode==5||slice_mode==4||slice_mode==6)&&!rz) p.z = slice.z;
+	if((slice_mode==1||slice_mode==5||slice_mode==4||slice_mode==7)&!rx) p.x = slice.x; // snap streamline position to slice position
+	if((slice_mode==2||slice_mode==5||slice_mode==6||slice_mode==7)&!ry) p.y = slice.y;
+	if((slice_mode==3||slice_mode==5||slice_mode==4||slice_mode==6)&!rz) p.z = slice.z;
 	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
 	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
 	const float hLx=0.5f*(float)(def_Nx-2u*(def_Dx>1u)), hLy=0.5f*(float)(def_Ny-2u*(def_Dy>1u)), hLz=0.5f*(float)(def_Nz-2u*(def_Dz>1u));
@@ -2504,13 +2496,14 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint n = get_global_id(0);
 	if(n>=(uint)def_N||is_halo(n)) return; // don't execute graphics_q_field() on halo
 	if(flags[n]&(TYPE_S|TYPE_E|TYPE_I|TYPE_G)) return;
+	const float3 p = position(coordinates(n));
+	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
+	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
+	if(!is_in_camera_frustrum(p, camera_cache)) return; // skip loading LBM data if grid cell is not visible
 	float3 un = load_u(n, u); // cache velocity
 	const float ul = length(un);
 	const float Q = calculate_Q(n, u);
 	if(Q<def_scale_Q_min||ul==0.0f) return; // don't draw lattice points where the velocity is very low
-	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
-	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
-	const float3 p = position(coordinates(n));
 	const int c = rainbow_color(255.0f*def_scale_u*ul); // coloring by velocity
 	draw_line(p-(0.5f/ul)*un, p+(0.5f/ul)*un, c, camera_cache, bitmap, zbuffer);
 }
@@ -2519,6 +2512,10 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint n = get_global_id(0);
 	const uint3 xyz = coordinates(n);
 	if(xyz.x>=def_Nx-1u||xyz.y>=def_Ny-1u||xyz.z>=def_Nz-1u||is_halo_q(xyz)) return; // don't execute graphics_q_field() on marching-cubes halo
+	const float3 p = position(xyz);
+	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
+	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
+	if(!is_in_camera_frustrum(p, camera_cache)) return; // skip loading LBM data if grid cell is not visible
 	const uint x0 =  xyz.x; // cube stencil
 	const uint xp =  xyz.x+1u;
 	const uint y0 =  xyz.y    *def_Nx;
@@ -2581,9 +2578,6 @@ string opencl_c_container() { return R( // ########################## begin of O
 	float3 triangles[15]; // maximum of 5 triangles with 3 vertices each
 	const uint tn = marching_cubes(v, def_scale_Q_min, triangles); // run marching cubes algorithm
 	if(tn==0u) return;
-	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
-	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
-	const float3 offset = (float3)((float)xyz.x+0.5f-0.5f*(float)def_Nx, (float)xyz.y+0.5f-0.5f*(float)def_Ny, (float)xyz.z+0.5f-0.5f*(float)def_Nz);
 	for(uint i=0u; i<tn; i++) {
 		const float3 p0 = triangles[3u*i   ]; // triangle coordinates in [0,1] (local cell)
 		const float3 p1 = triangles[3u*i+1u];
@@ -2592,17 +2586,17 @@ string opencl_c_container() { return R( // ########################## begin of O
 		int c0, c1, c2; {
 			const float x1=p0.x, y1=p0.y, z1=p0.z, x0=1.0f-x1, y0=1.0f-y1, z0=1.0f-z1; // calculate interpolation factors
 			const float3 ui = (x0*y0*z0)*uj[0]+(x1*y0*z0)*uj[1]+(x1*y0*z1)*uj[2]+(x0*y0*z1)*uj[3]+(x0*y1*z0)*uj[4]+(x1*y1*z0)*uj[5]+(x1*y1*z1)*uj[6]+(x0*y1*z1)*uj[7]; // perform trilinear interpolation
-			c0 = shading(rainbow_color(255.0f*def_scale_u*length(ui)), p0+offset, normal, camera_cache); // rainbow_color(255.0f*def_scale_u*length(ui));
+			c0 = shading(rainbow_color(255.0f*def_scale_u*length(ui)), p+p0, normal, camera_cache); // rainbow_color(255.0f*def_scale_u*length(ui));
 		} {
 			const float x1=p1.x, y1=p1.y, z1=p1.z, x0=1.0f-x1, y0=1.0f-y1, z0=1.0f-z1; // calculate interpolation factors
 			const float3 ui = (x0*y0*z0)*uj[0]+(x1*y0*z0)*uj[1]+(x1*y0*z1)*uj[2]+(x0*y0*z1)*uj[3]+(x0*y1*z0)*uj[4]+(x1*y1*z0)*uj[5]+(x1*y1*z1)*uj[6]+(x0*y1*z1)*uj[7]; // perform trilinear interpolation
-			c1 = shading(rainbow_color(255.0f*def_scale_u*length(ui)), p1+offset, normal, camera_cache); // rainbow_color(255.0f*def_scale_u*length(ui));
+			c1 = shading(rainbow_color(255.0f*def_scale_u*length(ui)), p+p1, normal, camera_cache); // rainbow_color(255.0f*def_scale_u*length(ui));
 		} {
 			const float x1=p2.x, y1=p2.y, z1=p2.z, x0=1.0f-x1, y0=1.0f-y1, z0=1.0f-z1; // calculate interpolation factors
 			const float3 ui = (x0*y0*z0)*uj[0]+(x1*y0*z0)*uj[1]+(x1*y0*z1)*uj[2]+(x0*y0*z1)*uj[3]+(x0*y1*z0)*uj[4]+(x1*y1*z0)*uj[5]+(x1*y1*z1)*uj[6]+(x0*y1*z1)*uj[7]; // perform trilinear interpolation
-			c2 = shading(rainbow_color(255.0f*def_scale_u*length(ui)), p2+offset, normal, camera_cache); // rainbow_color(255.0f*def_scale_u*length(ui));
+			c2 = shading(rainbow_color(255.0f*def_scale_u*length(ui)), p+p2, normal, camera_cache); // rainbow_color(255.0f*def_scale_u*length(ui));
 		}
-		draw_triangle_interpolated(p0+offset, p1+offset, p2+offset, c0, c1, c2, camera_cache, bitmap, zbuffer); // draw triangle with interpolated colors
+		draw_triangle_interpolated(p+p0, p+p1, p+p2, c0, c1, c2, camera_cache, bitmap, zbuffer); // draw triangle with interpolated colors
 	}
 }
 
@@ -2611,6 +2605,10 @@ string opencl_c_container() { return R( // ########################## begin of O
 	const uint n = get_global_id(0);
 	const uint3 xyz = coordinates(n);
 	if(xyz.x>=def_Nx-1u||xyz.y>=def_Ny-1u||xyz.z>=def_Nz-1u) return;
+	const float3 p = position(xyz);
+	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
+	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
+	if(!is_in_camera_frustrum(p, camera_cache)) return; // skip loading LBM data if grid cell is not visible
 	uint j[8];
 	const uint x0 =  xyz.x; // cube stencil
 	const uint xp =  xyz.x+1u;
@@ -2631,15 +2629,12 @@ string opencl_c_container() { return R( // ########################## begin of O
 	float3 triangles[15]; // maximum of 5 triangles with 3 vertices each
 	const uint tn = marching_cubes(v, 0.5f, triangles); // run marching cubes algorithm
 	if(tn==0u) return;
-	float camera_cache[15]; // cache camera parameters in case the kernel draws more than one shape
-	for(uint i=0u; i<15u; i++) camera_cache[i] = camera[i];
-	const float3 offset = (float3)((float)xyz.x+0.5f-0.5f*(float)def_Nx, (float)xyz.y+0.5f-0.5f*(float)def_Ny, (float)xyz.z+0.5f-0.5f*(float)def_Nz);
 	for(uint i=0u; i<tn; i++) {
-		const float3 p0 = triangles[3u*i   ]+offset;
-		const float3 p1 = triangles[3u*i+1u]+offset;
-		const float3 p2 = triangles[3u*i+2u]+offset;
-		const float3 p=(p0+p1+p2)/3.0f, normal=cross(p1-p0, p2-p0);
-		const int c = shading(55<<16|155<<8|255, p, normal, camera_cache);
+		const float3 p0 = p+triangles[3u*i   ];
+		const float3 p1 = p+triangles[3u*i+1u];
+		const float3 p2 = p+triangles[3u*i+2u];
+		const float3 pc=(p0+p1+p2)/3.0f, normal=cross(p1-p0, p2-p0);
+		const int c = shading(55<<16|155<<8|255, pc, normal, camera_cache);
 		draw_triangle(p0, p1, p2, c, camera_cache, bitmap, zbuffer);
 		//draw_line(p0, p1, c, camera_cache, bitmap, zbuffer); // wireframe rendering
 		//draw_line(p0, p2, c, camera_cache, bitmap, zbuffer);

@@ -66,7 +66,7 @@ void set_light(const uint i, const float3& position) {
 		light_sources_n = max(light_sources_n, i+1u);
 	}
 }
-int lighting(const int color, const float3& p, const float3& normal, const bool translucent=false) {
+int shading(const int color, const float3& p, const float3& normal, const bool translucent=false) {
 	const float snb = sq(normal.x)+sq(normal.y)+sq(normal.z); // only one sqrt instead of two
 	float br = 0.0f;
 	for(uint i=0u; i<light_sources_n; i++) {
@@ -362,7 +362,7 @@ void draw_line(const float3& p0, const float3& p1, const int color) {
 	}
 }
 void draw_triangle(const float3& p0, const float3& p1, const float3& p2, const int color, const bool translucent) { // points clockwise from above
-	const int cl = lighting(color, (p0+p1+p2)/3.0f, cross(p1-p0, p2-p0), translucent);
+	const int cl = shading(color, (p0+p1+p2)/3.0f, cross(p1-p0, p2-p0), translucent);
 	if(!camera.vr) {
 		convert_triangle(p0, p1, p2, cl,  0);
 	} else {
@@ -372,9 +372,9 @@ void draw_triangle(const float3& p0, const float3& p1, const float3& p2, const i
 }
 void draw_triangle(const float3& p0, const float3& p1, const float3& p2, const int c0, const int c1, const int c2, const bool translucent) { // points clockwise from above
 	const float3 normal = cross(p1-p0, p2-p0);
-	const int cl0 = lighting(c0, p0, normal, translucent);
-	const int cl1 = lighting(c1, p1, normal, translucent);
-	const int cl2 = lighting(c2, p2, normal, translucent);
+	const int cl0 = shading(c0, p0, normal, translucent);
+	const int cl1 = shading(c1, p1, normal, translucent);
+	const int cl2 = shading(c2, p2, normal, translucent);
 	if(!camera.vr) {
 		convert_triangle_interpolated(p0, p1, p2, cl0, cl1, cl2,  0);
 	} else {
@@ -689,10 +689,12 @@ int main(int argc, char* argv[]) {
 	input_thread.join();
 	return 0;
 }
+
 #endif // Linux
 #endif // INTERACTIVE_GRAPHICS
 
 #ifdef INTERACTIVE_GRAPHICS_ASCII
+
 uint last_textwidth=0u, last_textheight=0u;
 uint fontwidth=8u, fontheight=16u;
 void update_frame(const double frametime) {
@@ -748,9 +750,11 @@ int main(int argc, char* argv[]) {
 	input_thread.join();
 	return 0;
 }
+
 #endif // INTERACTIVE_GRAPHICS_ASCII
 
 #if !defined(INTERACTIVE_GRAPHICS) && !defined(INTERACTIVE_GRAPHICS_ASCII)
+
 int main(int argc, char* argv[]) {
 	main_arguments = get_main_arguments(argc, argv);
 	camera = Camera(GRAPHICS_FRAME_WIDTH, GRAPHICS_FRAME_HEIGHT, 60u); // width and height must be divisible by 8
@@ -764,5 +768,6 @@ int main(int argc, char* argv[]) {
 	compute_thread.join();
 	return 0;
 }
+
 #endif // no INTERACTIVE_GRAPHICS and no INTERACTIVE_GRAPHICS_ASCII
 #endif // GRAPHICS

@@ -3,7 +3,10 @@
 
 
 ## 1. Download
-[Download](https://github.com/ProjectPhysX/FluidX3D/archive/refs/heads/master.zip) and unzip the source code, or clone with `git clone https://github.com/ProjectPhysX/FluidX3D.git`.
+[Download](https://github.com/ProjectPhysX/FluidX3D/archive/refs/heads/master.zip) and unzip the source code, or clone with:
+```bash
+git clone https://github.com/ProjectPhysX/FluidX3D.git
+```
 
 <br>
 
@@ -22,18 +25,30 @@
 - To select a specific GPU, open Windows CMD in the `FluidX3D` folder (type `cmd` in File Explorer in the directory field and press <kbd>Enter</kbd>), then run `bin\FluidX3D.exe 0` to select device `0`. You can also select multiple GPUs with `bin\FluidX3D.exe 0 1 3 6` if the setup is [configured as multi-GPU](#the-lbm-class).
 
 ### Linux
-- Compile and run with `chmod +x make.sh` and `./make.sh`.
+- Compile and run with:
+  ```bash
+  chmod +x make.sh
+  ./make.sh
+  ```
 - Compiling requires `C++17`, which is supported since `g++` version `8`. Check with `g++ --version`.
 - If you use [`INTERACTIVE_GRAPHICS`](src/defines.hpp), change to the "[compile on Linux with X11](make.sh#L6)" command in [`make.sh`](make.sh#L6).
 - To select a specific GPU, enter `./make.sh 0` to compile+run, or `bin/FluidX3D 0` to run on device `0`. You can also select multiple GPUs with `bin/FluidX3D 0 1 3 6` if the setup is [configured as multi-GPU](#the-lbm-class).
 
 ### macOS
 - Select the "[compile on macOS](make.sh#L9)" command in [`make.sh`](make.sh#L9).
-- Compile and run with `chmod +x make.sh` and `./make.sh`.
+- Compile and run with:
+  ```bash
+  chmod +x make.sh
+  ./make.sh
+  ```
 
 ### Android
 - Select the "[compile on Android](make.sh#L10)" command in [`make.sh`](make.sh#L10).
-- Compile and run with `chmod +x make.sh` and `./make.sh`.
+- Compile and run with:
+  ```bash
+  chmod +x make.sh
+  ./make.sh
+  ```
 
 <br>
 
@@ -46,30 +61,35 @@
 
 <br>
 
-## 4. Keyboard/Mouse Controls for [`INTERACTIVE_GRAPHICS`](src/defines.hpp)
-- <kbd>P</kbd>: start/pause the simulation
-- <kbd>H</kbd>: show/hide help menu for keyboard controls and visualization settings
-- <kbd>1</kbd>: flag wireframe / solid surface (and force vectors on solid cells or surface pressure if the extension is used)
-- <kbd>2</kbd>: velocity field
-- <kbd>3</kbd>: streamlines
-- <kbd>4</kbd>: vorticity (velocity-colored Q-criterion isosurface)
-- <kbd>5</kbd>: rasterized free surface
-- <kbd>6</kbd>: raytraced free surface
-- <kbd>7</kbd>: particles
-- <kbd>T</kbd>: toggle slice visualization mode
-- <kbd>Q</kbd>/<kbd>E</kbd>: move slice in slice visualization mode
-- <kbd>Mouse</kbd> or <kbd>I</kbd>/<kbd>J</kbd>/<kbd>K</kbd>/<kbd>L</kbd>: rotate camera
-- <kbd>Scrollwheel</kbd> or <kbd>+</kbd>/<kbd>-</kbd>: zoom (centered camera mode) or camera movement speed (free camera mode)
-- <kbd>Mouseclick</kbd> or <kbd>U</kbd>: toggle rotation with <kbd>Mouse</kbd> and angle snap rotation with <kbd>I</kbd>/<kbd>J</kbd>/<kbd>K</kbd>/<kbd>L</kbd>
-- <kbd>Y</kbd>/<kbd>X</kbd>: adjust camera field of view
-- <kbd>G</kbd>: print current camera position/rotation in console as copy/paste command
-- <kbd>R</kbd>: toggle camera autorotation
-- <kbd>F</kbd>: toggle centered/free camera mode
-- <kbd>W</kbd>/<kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd>/<kbd>Space</kbd>/<kbd>C</kbd>: move free camera
-- <kbd>V</kbd>: toggle stereoscopic rendering for VR
-- <kbd>B</kbd>: toggle VR-goggles/3D-TV mode for stereoscopic rendering
-- <kbd>N</kbd>/<kbd>M</kbd>: adjust eye distance for stereoscopic rendering
-- <kbd>Esc</kbd>/<kbd>Alt</kbd>+<kbd>F4</kbd>: quit
+## 4. Keyboard/Mouse Controls for [`INTERACTIVE_GRAPHICS`](src/defines.hpp)/[`_ASCII`](src/defines.hpp)
+| Key                       | Function                                                                                                                           |
+| :-----------------------: | :--------------------------------------------------------------------------------------------------------------------------------- |
+|                           |                                                                                                                                    |
+| <kbd>P</kbd>              | start/pause the simulation                                                                                                         |
+| <kbd>H</kbd>              | show/hide help menu for keyboard controls and visualization settings                                                               |
+| <kbd>Esc</kbd><br><kbd>Alt</kbd>+<kbd>F4</kbd> | quit                                                                                                          |
+|                           |                                                                                                                                    |
+| <kbd>Mouse</kbd><br><kbd>I</kbd><br><kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> | rotate camera                                                                     |
+| <kbd>Scrollwheel</kbd><br><kbd>+</kbd> <kbd>-</kbd> | zoom (centered camera mode) or camera movement speed (free camera mode)                                  |
+| <kbd>Mouseclick</kbd><br><kbd>U</kbd> | toggle rotation with <kbd>Mouse</kbd> and angle snap rotation with <kbd>I</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> |
+| <kbd>F</kbd>              | toggle centered/free camera mode                                                                                                   |
+| <kbd>W</kbd><br><kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd><br><kbd>Space</kbd> <kbd>C</kbd> | move free camera                                                     |
+| <kbd>Y</kbd> <kbd>X</kbd> | adjust camera field of view                                                                                                        |
+| <kbd>R</kbd>              | toggle camera autorotation                                                                                                         |
+| <kbd>G</kbd>              | print current camera position/rotation in console as copy/paste command                                                            |
+| <kbd>V</kbd>              | toggle stereoscopic rendering for VR                                                                                               |
+| <kbd>B</kbd>              | toggle VR-goggles/3D-TV mode for stereoscopic rendering                                                                            |
+| <kbd>N</kbd> <kbd>M</kbd> | adjust eye distance for stereoscopic rendering                                                                                     |
+|                           |                                                                                                                                    |
+| <kbd>1</kbd>              | flag wireframe / solid surface (and force vectors on solid cells or surface pressure if the extension is used)                     |
+| <kbd>2</kbd>              | velocity field                                                                                                                     |
+| <kbd>3</kbd>              | streamlines                                                                                                                        |
+| <kbd>4</kbd>              | vorticity (velocity-colored Q-criterion isosurface)                                                                                |
+| <kbd>5</kbd>              | rasterized free surface                                                                                                            |
+| <kbd>6</kbd>              | raytraced free surface                                                                                                             |
+| <kbd>7</kbd>              | particles                                                                                                                          |
+| <kbd>T</kbd>              | toggle slice visualization mode                                                                                                    |
+| <kbd>Q</kbd> <kbd>E</kbd> | move slice in slice visualization mode                                                                                             |
 
 <br>
 
@@ -104,11 +124,11 @@
 
 ### Initial and Boundary Conditions
 - If not explicitly set, by default all cells have the default values `rho=1`, `u=0`, `flags=0`.
-- The initial/boundary conditions of single grid cells are set in a loop that iterates over the entire grid:
+- The initial/boundary conditions of single grid cells are set in a parallelized loop that iterates over the entire grid:
   ```c
-  const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(ulong n=0ull; n<lbm.get_N(); n++) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
+  const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); parallel_for(lbm.get_N(), [&](ulong n) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
   	// ...
-  }
+  });
   ```
   Within this loop, you can set the density, velocity and flags of each cell individually by assigning values to `lbm.rho[n]`, `lbm.u.x[n]`, `lbm.u.y[n]`, `lbm.u.z[n]` and `lbm.flags[n]`. The `n` here is the linearized 3D grid index, corresponding to an (`x`|`y`|`z`) position via the function `lbm.coordinates(n, x, y, z)`.
 - For example, to set solid walls at the left and right sides of the simulation box, write
@@ -193,7 +213,7 @@
   }
   ```
 - To find suitable camera placement, run the simulation at low resolution in [`INTERACTIVE_GRAPHICS`](src/defines.hpp) mode, rotate/move the camera to the desired position, click the <kbd>Mouse</kbd> to disable mouse rotation, and press <kbd>G</kbd> to print the current camera settings as a copy-paste command in the console. <kbd>Alt</kbd>+<kbd>Tab</kbd> to the console and copy the camera placement command by selecting it with the mouse and right-clicking, then paste it into the [`main_setup()`](src/setup.cpp) function.
-- The visualization mode(s) can be specified as `lbm.graphics.visualization_modes` with the [`VIS_...`](src/defines.hpp) macros. You can also set the `lbm.graphics.slice_mode` (`0`=no slice, `1`=x, `2`=y, `3`=z, `4`´=xz, `5`=xyz, `6`=yz, `7`=xy) and reposition the slices with `lbm.graphics.slice_x`/`lbm.graphics.slice_y`/`lbm.graphics.slice_z`.
+- The visualization mode(s) can be specified as `lbm.graphics.visualization_modes` with the [`VIS_...`](src/defines.hpp) macros. You can also set the `lbm.graphics.slice_mode` (`0`=no slice, `1`=x, `2`=y, `3`=z, `4`=xz, `5`=xyz, `6`=yz, `7`=xy) and reposition the slices with `lbm.graphics.slice_x`/`lbm.graphics.slice_y`/`lbm.graphics.slice_z`.
 - Exported frames will automatically be assigned the current simulation time step in their name, in the format `bin/export/image-123456789.png`.
 - To convert the rendered `.png` images to video, use [FFmpeg](https://ffmpeg.org/):
   ```bash
