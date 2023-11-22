@@ -82,7 +82,9 @@ string default_filename(const string& name, const string& extension, const ulong
 	return default_filename("", name, extension, t);
 }
 
-
+string simple_filename(const string& path, const string& name, const string& extension) { // just use the filename
+	return create_file_extension((path == "" ? get_exe_path() + "export/" : path) + (name == "" ? "file" : name), extension);
+}
 
 LBM_Domain::LBM_Domain(const Device_Info& device_info, const uint Nx, const uint Ny, const uint Nz, const uint Dx, const uint Dy, const uint Dz, const int Ox, const int Oy, const int Oz, const float nu, const float fx, const float fy, const float fz, const float sigma, const float alpha, const float beta, const uint particles_N, const float particles_rho) { // constructor with manual device selection and domain offset
 	this->Nx = Nx; this->Ny = Ny; this->Nz = Nz;
@@ -1118,7 +1120,7 @@ void LBM::Graphics::write_frame(const string& path, const string& name, const st
 void LBM::Graphics::write_frame(const uint x1, const uint y1, const uint x2, const uint y2, const string& path, const string& name, const string& extension, bool print_preview) { // save a cropped current frame with two corner points (x1,y1) and (x2,y2)
 	info.allow_rendering = false; // temporarily disable interactive rendering
 	int* image_data = draw_frame(); // make sure the frame is fully rendered
-	const string filename = default_filename(path, name, extension, lbm->get_t());
+	const string filename = simple_filename(path, name, extension);
 	const uint xa=max(min(x1, x2), 0u), xb=min(max(x1, x2), camera.width ); // sort coordinates if necessary
 	const uint ya=max(min(y1, y2), 0u), yb=min(max(y1, y2), camera.height);
 	Image* image = new Image(xb-xa, yb-ya); // create local copy of frame buffer

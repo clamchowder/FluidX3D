@@ -336,21 +336,37 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 /*void main_setup() { // Concorde; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 3.0f, 0.5f), 1320u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
+	const uint3 lbm_N = resolution(float3(1.0f, 2.2f, 1.5f), 12280u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
 	const float lbm_Re = 1000000.0f;
 	const float lbm_u = 0.1f;
 	LBM lbm(lbm_N, units.nu_from_Re(lbm_Re, (float)lbm_N.x, lbm_u));
 	// ###################################################################################### define geometry ######################################################################################
-	const float size = 1.75f*lbm.size().x;
+	//const float size = 1.75f*lbm.size().x; // concorde
+	const float size = 1.2f * lbm.size().x;
 	const float3 center = float3(lbm.center().x, 0.52f*size, lbm.center().z+0.03f*size);
-	const float3x3 rotation = float3x3(float3(1, 0, 0), radians(-10.0f))*float3x3(float3(0, 0, 1), radians(90.0f))*float3x3(float3(1, 0, 0), radians(90.0f));
-	lbm.voxelize_stl(get_exe_path()+"../stl/concord_cut_large.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
+	//const float3x3 rotation = float3x3(float3(1, 0, 0), radians(-10.0f))*float3x3(float3(0, 0, 1), radians(90.0f))*float3x3(float3(1, 0, 0), radians(90.0f));
+	const float3x3 rotation = float3x3(float3(1, 0, 0), radians(10.0f)) * float3x3(float3(0, 0, 1), radians(-90.0f)); // f-15 dcs. x = pitch
+//	lbm.voxelize_stl(get_exe_path()+"../stl/concord_cut_large.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
+	lbm.voxelize_stl(get_exe_path() + "../stl/dcs_f15_a20.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
 	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(ulong n=0ull; n<lbm.get_N(); n++) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = lbm_u;
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
 	} // ######################################################################### run simulation, export images and data ##########################################################################
 	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
+#if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const uint lbm_T = 10000u;
+	lbm.graphics.set_camera_centered(-47.7f, 21.7f, 100.0f, 1.000000f);
+	lbm.run(0u);
+	int imgIdx = 0;
+	while (lbm.get_t() < lbm_T) { // main simulation loop
+		if (lbm.graphics.next_frame(lbm_T, 25.0f)) { // render enough frames for 25 seconds of 60fps video
+			lbm.graphics.write_frame(get_exe_path() + "export/camera_angle_1/", "f" + imgIdx); // export image from camera position 1
+		}
+		lbm.run(1u); // run 1 LBM time step
+	}
+#else
 	lbm.run();
+#endif
 } /**/
 
 
@@ -546,7 +562,7 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 /*void main_setup() { // aerodynamics of a cow; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS or GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 2.0f, 1.0f), 1000u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
+	const uint3 lbm_N = resolution(float3(1.0f, 2.0f, 1.0f), 12000u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
 	const float si_u = 1.0f;
 	const float si_length = 2.4f;
 	const float si_T = 10.0f;
@@ -559,9 +575,13 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 	print_info("1 cell = "+to_string(1000.0f*units.si_x(1.0f), 2u)+" mm");
 	LBM lbm(lbm_N, units.nu(si_nu));
 	// ###################################################################################### define geometry ######################################################################################
-	const float3x3 rotation = float3x3(float3(1, 0, 0), radians(180.0f))*float3x3(float3(0, 0, 1), radians(180.0f));
-	Mesh* mesh = read_stl(get_exe_path()+"../stl/Cow_t.stl", lbm.size(), lbm.center(), rotation, lbm_length); // https://www.thingiverse.com/thing:182114/files
-	mesh->translate(float3(0.0f, 1.0f-mesh->pmin.y+0.1f*lbm_length, 1.0f-mesh->pmin.z)); // move mesh forward a bit and to simulation box bottom, keep in mind 1 cell thick box boundaries
+	//const float3x3 rotation = float3x3(float3(1, 0, 0), radians(180.0f))*float3x3(float3(0, 0, 1), radians(180.0f));
+	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(-90.0f));
+
+	//Mesh* mesh = read_stl(get_exe_path()+"../stl/Cow_t.stl", lbm.size(), lbm.center(), rotation, lbm_length); // https://www.thingiverse.com/thing:182114/files
+	Mesh* mesh = read_stl(get_exe_path() + "../stl/dcs_r77.stl", lbm.size(), lbm.center(), rotation, lbm_length); // https://www.thingiverse.com/thing:182114/files
+	//mesh->translate(float3(0.0f, 1.0f-mesh->pmin.y+0.1f*lbm_length, 1.0f-mesh->pmin.z)); // move mesh forward a bit and to simulation box bottom, keep in mind 1 cell thick box boundaries
+	mesh->translate(float3(0.0f, 1.0f - mesh->pmin.y, 1.0f - mesh->pmin.z + 0.2f * lbm_length)); // move mesh forward a bit and to simulation box bottom, keep in mind 1 cell thick box boundaries
 	lbm.voxelize_mesh_on_device(mesh);
 	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(ulong n=0ull; n<lbm.get_N(); n++) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		if(z==0u) lbm.flags[n] = TYPE_S; // solid floor
@@ -575,10 +595,54 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 	while(lbm.get_t()<=units.t(si_T)) { // main simulation loop
 		if(lbm.graphics.next_frame(units.t(si_T), 10.0f)) lbm.graphics.write_frame();
 		lbm.run(1u);
+
+		lbm.calculate_force_on_boundaries();
+		lbm.F.read_from_device();
+		const float3 force = lbm.calculate_force_on_object(TYPE_S | TYPE_X);
 	}
 #else // GRAPHICS && !INTERACTIVE_GRAPHICS
 	lbm.run();
 #endif // GRAPHICS && !INTERACTIVE_GRAPHICS
+} /**/
+
+
+void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
+	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
+	const uint3 lbm_N = resolution(float3(1.0f, 5.85f, 1.0f), 10000u); // for dcs r-77
+	// const uint3 lbm_N = resolution(float3(1.7f, 10.0f, 1.7f), 13560u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
+	const float lbm_Re = 1000000.0f;
+	const float lbm_u = 0.1f;
+	LBM lbm(lbm_N, units.nu_from_Re(lbm_Re, (float)lbm_N.x, lbm_u));
+	// ###################################################################################### define geometry ######################################################################################
+	// const float size = 4.75f*lbm.size().x; // for r-77
+	const float size = 3.0f * lbm.size().x;
+	const float3 center = float3(lbm.center().x, 0.52f*size, lbm.center().z);
+	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
+	//const float3x3 rotation = float3x3(float3(1, 0, 0), radians(90.0f)); // for aim7 thingiverse
+
+	lbm.voxelize_stl(get_exe_path()+"../stl/dcs_hawk.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
+	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(ulong n=0ull; n<lbm.get_N(); n++) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
+		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = lbm_u;
+		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
+	} // ######################################################################### run simulation, export images and data ##########################################################################
+	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
+#if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
+	const uint lbm_T = 10000u;
+	lbm.run(0u);
+	int fidx = 0;
+	while (lbm.get_t() < lbm_T) { // main simulation loop
+		if (lbm.graphics.next_frame(lbm_T, 25.0f)) { // render enough frames for 25 seconds of 60fps video
+			lbm.graphics.set_camera_centered(71.0f, 26.1f, 100.0f, 2.718281f);
+			lbm.graphics.write_frame(get_exe_path() + "export/camera_angle_1/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.set_camera_centered(-55.2f, -9.3f, 100.0f, 1.000000f);
+			lbm.graphics.write_frame(get_exe_path() + "export/camera_angle_2/", "f" + to_string(fidx)); // export image from camera position 1
+			fidx++;
+		}
+		lbm.run(1u); // run 1 LBM time step
+	}
+#else
+	lbm.run();
+#endif
 } /**/
 
 
