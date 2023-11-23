@@ -178,7 +178,7 @@ public:
 		this->cl_program = cl::Program(info.cl_context, cl_source);
 		const string build_options = string("-cl-fast-relaxed-math")+(info.intel_gpu_above_4gb_patch ? " -cl-intel-greater-than-4GB-buffer-required" : "");
 #ifndef LOG
-		int error = cl_program.build({ info.cl_device }, (build_options+" -w -save-temps-all").c_str()); // compile OpenCL C code, disable warnings
+		int error = cl_program.build({ info.cl_device }, (build_options).c_str()); // compile OpenCL C code, disable warnings
 		if(error) print_warning(cl_program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(info.cl_device)); // print build log
 #else // LOG, generate logfile for OpenCL code compilation
 		int error = cl_program.build({ info.cl_device }, build_options.c_str()); // compile OpenCL C code
