@@ -620,38 +620,44 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 5.0f, 1.0f), 2400u); // for dcs r-77
+	const uint3 lbm_N = resolution(float3(2.4f, 2.5f, 1.0f), 12000u); // for dcs r-77
 	// const uint3 lbm_N = resolution(float3(1.7f, 10.0f, 1.7f), 13560u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
 	const float lbm_Re = 1000000.0f;
 	const float lbm_u = 0.1f;
 	LBM lbm(lbm_N, units.nu_from_Re(lbm_Re, (float)lbm_N.x, lbm_u));
 	// ###################################################################################### define geometry ######################################################################################
 	// const float size = 4.75f*lbm.size().x; // for r-77
-	const float size = 3.0f * lbm.size().x;
-	const float3 center = float3(lbm.center().x, 0.7f*size, lbm.center().z);
-	const float3x3 rotation = float3x3(float3(0, 1, 0), radians(45.0f))*float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
+	const float size = 6.0f * lbm.size().x;
+	const float3 center = float3(lbm.center().x, -0.4f*size, lbm.center().z - 0.05f*size);
+	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
 	//const float3x3 rotation = float3x3(float3(1, 0, 0), radians(90.0f)); // for aim7 thingiverse
 
-	lbm.voxelize_stl(get_exe_path()+"../stl/r37_dcs_mod.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
+	lbm.voxelize_stl(get_exe_path()+"../stl/dcs_r77_fin_10.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
 	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(ulong n=0ull; n<lbm.get_N(); n++) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = lbm_u;
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
 	} // ######################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-	const uint lbm_T = 10000u;
+	const uint lbm_T = 30000u;
 	lbm.run(0u);
 	int fidx = 0;
-	lbm.graphics.set_camera_free(float3(2.201453f * (float)Nx, -0.082204f * (float)Ny, 1.164362f * (float)Nz), -4.1f, 25.9f, 90.0f);
-	lbm.graphics.slice_x = lbm.center().x;
-	lbm.graphics.slice_z = lbm.center().z;
-	lbm.graphics.slice_mode = 4;
+	lbm.graphics.slice_x = 540;
+	//lbm.graphics.slice_z = 123;
 	while (lbm.get_t() < lbm_T) { // main simulation loop
-		if (lbm.graphics.next_frame(lbm_T, 25.0f)) { // render enough frames for 25 seconds of 60fps video
+		if (lbm.graphics.next_frame(lbm_T, 25.0f)) { // render enough frames for 25 seconds of 60fps video			
+			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_Q_CRITERION;
+			lbm.graphics.slice_mode = 0;
+			lbm.graphics.set_camera_centered(94.0f, 42.1f, 100.0f, 1.000000f);
+			lbm.graphics.write_frame(get_exe_path() + "export/r77_fins_10a_criterion/", "f" + to_string(fidx)); // export image from camera position 1
+
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_STREAMLINES;
-			lbm.graphics.write_frame(get_exe_path() + "export/camera_angle_1/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.set_camera_centered(-202.0f, 8.0f, 100.0f, 1.648721f);
+			lbm.graphics.slice_mode = 1;
+			lbm.graphics.slice_x = 540;
+			lbm.graphics.write_frame(get_exe_path() + "export/r77_fins_10a_streamlines/", "f" + to_string(fidx));
+
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_FIELD;
-			lbm.graphics.write_frame(get_exe_path() + "export/camera_angle_2/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.write_frame(get_exe_path() + "export/r77_fins_10a_field/", "f" + to_string(fidx));
 			fidx++;
 		}
 		lbm.run(1u); // run 1 LBM time step
