@@ -620,19 +620,17 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(2.4f, 2.5f, 1.0f), 12000u); // for dcs r-77
-	// const uint3 lbm_N = resolution(float3(1.7f, 10.0f, 1.7f), 13560u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
+	//const uint3 lbm_N = resolution(float3(2.4f, 2.5f, 1.0f), 12000u); // for dcs r-77
+	const uint3 lbm_N = resolution(float3(1.0f, 5.85f, 1.0f), 10000u);
 	const float lbm_Re = 1000000.0f;
 	const float lbm_u = 0.1f;
 	LBM lbm(lbm_N, units.nu_from_Re(lbm_Re, (float)lbm_N.x, lbm_u));
 	// ###################################################################################### define geometry ######################################################################################
-	// const float size = 4.75f*lbm.size().x; // for r-77
-	const float size = 6.0f * lbm.size().x;
-	const float3 center = float3(lbm.center().x, -0.4f*size, lbm.center().z - 0.05f*size);
+	const float size = 3.0f * lbm.size().x;
+	const float3 center = float3(lbm.center().x, 0.52f * size, lbm.center().z);
 	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
-	//const float3x3 rotation = float3x3(float3(1, 0, 0), radians(90.0f)); // for aim7 thingiverse
 
-	lbm.voxelize_stl(get_exe_path()+"../stl/dcs_r77_fin_10.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
+	lbm.voxelize_stl(get_exe_path()+"../stl/jas_asraam.stl", center, rotation, size);
 	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(ulong n=0ull; n<lbm.get_N(); n++) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = lbm_u;
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
