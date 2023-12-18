@@ -620,45 +620,61 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 5.0f, 1.0f), 2400u); // for dcs r-77
+	const uint3 lbm_N = resolution(float3(1.0f, 3.5f, 1.0f), 1650u); // for dcs r-77
 	// const uint3 lbm_N = resolution(float3(1.7f, 10.0f, 1.7f), 13560u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
 	const float lbm_Re = 1000000.0f;
 	const float lbm_u = 0.1f;
-	LBM lbm(lbm_N, units.nu_from_Re(lbm_Re, (float)lbm_N.x, lbm_u));
+	const float si_u = 274.4f; // 0.83 mach in m/s
+	const float si_nu = 1.46e-5; // m2/s kinematic viscocity of air at 0C
+	const float si_length = 2.74; // meters
+	const float si_rho = 0.7364; // air density in kg/m3 at 5000 m (~16,000 ft)
+	units.set_m_kg_s(lbm_N.y, lbm_u, 1.0f, si_length, si_u, si_rho);
+	LBM lbm(lbm_N, units.nu(si_nu));
 	// ###################################################################################### define geometry ######################################################################################
 	// const float size = 4.75f*lbm.size().x; // for r-77
-	const float size = 3.0f * lbm.size().x;
-	const float3 center = float3(lbm.center().x, 0.52f*size, lbm.center().z);
-	const float3x3 rotation = float3x3(float3(0, 1, 0), radians(45.0f)) * float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
-	//const float3x3 rotation = float3x3(float3(1, 0, 0), radians(90.0f)); // for aim7 thingiverse
+	const float size = 1.0f * lbm.size().x;
+	const float3 center = float3(lbm.center().x, 0.35f * lbm.center().y, lbm.center().z);
+	//const float3x3 rotation = float3x3(float3(0, 1, 0), radians(45.0f)) * float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
+	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(90.0f));// *float3x3(float3(0, 1, 0), radians(30.0f));
 
-	lbm.voxelize_stl(get_exe_path()+"../stl/120d_dcs_mod.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
+	Mesh* wing = read_stl(get_exe_path() + "../stl/airliner_wings.stl");
+	wing->scale(0.9f * (lbm.size().x / wing->get_bounding_box_size().x));
+	wing->rotate(rotation);
+	wing->set_center(wing->get_bounding_box_center());
+	wing->translate(float3(lbm.center().x, 0.4f * lbm.center().y, lbm.center().z) - wing->get_bounding_box_center());
+	//lbm.voxelize_stl(get_exe_path()+"../stl/ultralight_wing.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
 	const uint Nx=lbm.get_Nx(), Ny=lbm.get_Ny(), Nz=lbm.get_Nz(); for(ulong n=0ull; n<lbm.get_N(); n++) { uint x=0u, y=0u, z=0u; lbm.coordinates(n, x, y, z);
 		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = lbm_u;
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
 	} // ######################################################################### run simulation, export images and data ##########################################################################
 	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-	const uint lbm_T = 15000u;
+	const uint lbm_T = 35000u;
+	const uint rotate_until = 20000u;
 	lbm.run(0u);
 	int fidx = 0;
+	float rotate_step = -30.0f / rotate_until;
 	while (lbm.get_t() < lbm_T) { // main simulation loop
+		lbm.voxelize_mesh_on_device(wing, TYPE_S, wing->get_center());
+		if (lbm.get_t() < rotate_until) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
 		if (lbm.graphics.next_frame(lbm_T, 25.0f)) { // render enough frames for 25 seconds of 60fps video
-			lbm.graphics.set_camera_centered(71.0f, 26.1f, 100.0f, 2.718281f);
+			/*lbm.graphics.set_camera_centered(-33.0f, 23.3f, 100.0f, 1.05f);
 			lbm.graphics.slice_mode = 0;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_Q_CRITERION;
-			lbm.graphics.write_frame(get_exe_path() + "export/camera_angle_1/", "f" + to_string(fidx)); // export image from camera position 1
-			lbm.graphics.set_camera_centered(-4.7f, 0.5f, 100.0f, 1.5f);
-			lbm.graphics.slice_mode = 4;
+			lbm.graphics.write_frame(get_exe_path() + "export/si_air_crit15/", "f" + to_string(fidx)); // export image from camera position 1 */
+			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.20000f);
+			lbm.graphics.slice_mode = 1;
 			lbm.graphics.slice_x = lbm.center().x;
-			lbm.graphics.slice_z = lbm.center().z;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_FIELD;
-			lbm.graphics.write_frame(get_exe_path() + "export/camera_angle_2/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.write_frame(get_exe_path() + "export/ulm_varying_field/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_STREAMLINES;
+			lbm.graphics.write_frame(get_exe_path() + "export/ulm_varying_streamlines/", "f" + to_string(fidx));
 			fidx++;
 		}
 		lbm.run(1u); // run 1 LBM time step
 	}
 #else
+	lbm.voxelize_mesh_on_device(wing, TYPE_S, wing->get_center());
 	lbm.run();
 #endif
 } /**/
