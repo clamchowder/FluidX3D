@@ -620,7 +620,7 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 3.5f, 1.0f), 1650u); // for dcs r-77
+	const uint3 lbm_N = resolution(float3(1.0f, 5.0f, 1.0f), 2400u); // for dcs r-77
 	// const uint3 lbm_N = resolution(float3(1.7f, 10.0f, 1.7f), 13560u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
 	const float lbm_Re = 1000000.0f;
 	const float lbm_u = 0.1f;
@@ -647,7 +647,6 @@ void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, 
 		if(lbm.flags[n]!=TYPE_S) lbm.u.y[n] = lbm_u;
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
 	} // ######################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	const uint lbm_T = 35000u;
 	const uint rotate_until = 20000u;
