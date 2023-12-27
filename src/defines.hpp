@@ -11,7 +11,7 @@
 //#define TRT // choose two-relaxation-time LBM collision operator
 
 //#define FP16S // compress LBM DDFs to range-shifted IEEE-754 FP16; number conversion is done in hardware; all arithmetic is still done in FP32
-//#define FP16C // compress LBM DDFs to more accurate custom FP16C format; number conversion is emulated in software; all arithmetic is still done in FP32
+#define FP16C // compress LBM DDFs to more accurate custom FP16C format; number conversion is emulated in software; all arithmetic is still done in FP32
 
 //#define BENCHMARK // disable all extensions and setups and run benchmark setup instead
 
@@ -28,8 +28,8 @@
 //#define INTERACTIVE_GRAPHICS_ASCII // enable interactive graphics in ASCII mode the console; start/pause the simulation by pressing P
 #define GRAPHICS // run FluidX3D in the console, but still enable graphics functionality for writing rendered frames to the hard drive
 
-#define GRAPHICS_FRAME_WIDTH 1920 // set frame width if only GRAPHICS is enabled
-#define GRAPHICS_FRAME_HEIGHT 1080 // set frame height if only GRAPHICS is enabled
+#define GRAPHICS_FRAME_WIDTH 3840 // set frame width if only GRAPHICS is enabled
+#define GRAPHICS_FRAME_HEIGHT 2160 // set frame height if only GRAPHICS is enabled
 #define GRAPHICS_BACKGROUND_COLOR 0x000000 // set background color; black background (default) = 0x000000, white background = 0xFFFFFF
 //#define GRAPHICS_TRANSPARENCY 0.7f // optional: comment/uncomment this line to disable/enable semi-transparent rendering (looks better but reduces framerate), number represents transparency (equal to 1-opacity) (default: 0.7f)
 #define GRAPHICS_U_MAX 0.25f // maximum velocity for velocity coloring in units of LBM lattice speed of sound (c=1/sqrt(3)) (default: 0.25f)

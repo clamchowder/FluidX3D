@@ -637,8 +637,8 @@ void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, 
 	//const float3x3 rotation = float3x3(float3(0, 1, 0), radians(45.0f)) * float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
 	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(90.0f));// *float3x3(float3(0, 1, 0), radians(30.0f));
 
-	Mesh* wing = read_stl(get_exe_path() + "../stl/airliner_wings.stl");
-	wing->scale(0.9f * (lbm.size().x / wing->get_bounding_box_size().x));
+	Mesh* wing = read_stl(get_exe_path() + "../stl/r77_fin.stl");
+	wing->scale(0.4f * (lbm.size().z / wing->get_bounding_box_size().z));
 	wing->rotate(rotation);
 	wing->set_center(wing->get_bounding_box_center());
 	wing->translate(float3(lbm.center().x, 0.4f * lbm.center().y, lbm.center().z) - wing->get_bounding_box_center());
@@ -648,26 +648,28 @@ void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, 
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
 	} // ######################################################################### run simulation, export images and data ##########################################################################
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-	const uint lbm_T = 35000u;
-	const uint rotate_until = 20000u;
+	const uint lbm_T = 70000u;
+	const uint rotate_start = 8000, rotate_until = 11000u, rotate2_start = 20000, rotate2_until=23000, rotate3_start = 50000, rotate3_end = 56000;
 	lbm.run(0u);
 	int fidx = 0;
-	float rotate_step = -30.0f / rotate_until;
+	float rotate_step = -15.0f / (rotate_until - rotate_start);
 	while (lbm.get_t() < lbm_T) { // main simulation loop
 		lbm.voxelize_mesh_on_device(wing, TYPE_S, wing->get_center());
-		if (lbm.get_t() < rotate_until) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
-		if (lbm.graphics.next_frame(lbm_T, 25.0f)) { // render enough frames for 25 seconds of 60fps video
+		if (lbm.get_t() < rotate_until && lbm.get_t() > rotate_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
+		if (lbm.get_t() < rotate2_until && lbm.get_t() > rotate2_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
+		if (lbm.get_t() < rotate3_end && lbm.get_t() > rotate3_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(-2.0f * rotate_step)));
+		if (lbm.graphics.next_frame(lbm_T, 55.0f)) { // render enough frames for 25 seconds of 60fps video
 			/*lbm.graphics.set_camera_centered(-33.0f, 23.3f, 100.0f, 1.05f);
 			lbm.graphics.slice_mode = 0;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_Q_CRITERION;
 			lbm.graphics.write_frame(get_exe_path() + "export/si_air_crit15/", "f" + to_string(fidx)); // export image from camera position 1 */
-			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.20000f);
+			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.75f);
 			lbm.graphics.slice_mode = 1;
 			lbm.graphics.slice_x = lbm.center().x;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_FIELD;
-			lbm.graphics.write_frame(get_exe_path() + "export/ulm_varying_field/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.write_frame(get_exe_path() + "export/77_varying_field/", "f" + to_string(fidx)); // export image from camera position 1
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_STREAMLINES;
-			lbm.graphics.write_frame(get_exe_path() + "export/ulm_varying_streamlines/", "f" + to_string(fidx));
+			lbm.graphics.write_frame(get_exe_path() + "export/77_varying_streamlines/", "f" + to_string(fidx));
 			fidx++;
 		}
 		lbm.run(1u); // run 1 LBM time step
