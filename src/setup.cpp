@@ -620,7 +620,7 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 5.0f, 1.0f), 2400u); // for dcs r-77
+	const uint3 lbm_N = resolution(float3(1.0f, 3.0f, 1.0f), 1600u); // for dcs r-77
 	// const uint3 lbm_N = resolution(float3(1.7f, 10.0f, 1.7f), 13560u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
 	const float lbm_Re = 1000000.0f;
 	const float lbm_u = 0.1f;
@@ -637,8 +637,8 @@ void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, 
 	//const float3x3 rotation = float3x3(float3(0, 1, 0), radians(45.0f)) * float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
 	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(90.0f));// *float3x3(float3(0, 1, 0), radians(30.0f));
 
-	Mesh* wing = read_stl(get_exe_path() + "../stl/r77_fin.stl");
-	wing->scale(0.4f * (lbm.size().z / wing->get_bounding_box_size().z));
+	Mesh* wing = read_stl(get_exe_path() + "../stl/kalibr_wing.stl");
+	wing->scale(0.55f * (lbm.size().z / wing->get_bounding_box_size().z));
 	wing->rotate(rotation);
 	wing->set_center(wing->get_bounding_box_center());
 	wing->translate(float3(lbm.center().x, 0.4f * lbm.center().y, lbm.center().z) - wing->get_bounding_box_center());
@@ -663,13 +663,13 @@ void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, 
 			lbm.graphics.slice_mode = 0;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_Q_CRITERION;
 			lbm.graphics.write_frame(get_exe_path() + "export/si_air_crit15/", "f" + to_string(fidx)); // export image from camera position 1 */
-			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.75f);
+			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.45f);
 			lbm.graphics.slice_mode = 1;
 			lbm.graphics.slice_x = lbm.center().x;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_FIELD;
-			lbm.graphics.write_frame(get_exe_path() + "export/77_varying_field/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.write_frame(get_exe_path() + "export/varying_field/", "f" + to_string(fidx)); // export image from camera position 1
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_STREAMLINES;
-			lbm.graphics.write_frame(get_exe_path() + "export/77_varying_streamlines/", "f" + to_string(fidx));
+			lbm.graphics.write_frame(get_exe_path() + "export/varying_streamlines/", "f" + to_string(fidx));
 			fidx++;
 		}
 		lbm.run(1u); // run 1 LBM time step
