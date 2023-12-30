@@ -649,21 +649,24 @@ void main_setup() { // DCS Missiles; required extensions in defines.hpp: FP16S, 
 	} // ######################################################################### run simulation, export images and data ##########################################################################
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
 	const uint lbm_T = 70000u;
-	const uint rotate_start = 8000, rotate_until = 11000u, rotate2_start = 20000, rotate2_until=23000, rotate3_start = 50000, rotate3_end = 56000;
+	const uint rotate_duration = 3000;
+	const uint rotate_start = 8000, rotate_until = 11000u, rotate2_start = 17000, rotate2_until=20000, rotate3_start = 27000, rotate3_end = 30000;
+	const uint backrotate_start = 40000, backrotate_end = backrotate_start + 6 * rotate_duration;
 	lbm.run(0u);
 	int fidx = 0;
-	float rotate_step = -15.0f / (rotate_until - rotate_start);
+	float rotate_step = -10.0f / rotate_duration;
 	while (lbm.get_t() < lbm_T) { // main simulation loop
 		lbm.voxelize_mesh_on_device(wing, TYPE_S, wing->get_center());
 		if (lbm.get_t() < rotate_until && lbm.get_t() > rotate_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
 		if (lbm.get_t() < rotate2_until && lbm.get_t() > rotate2_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
-		if (lbm.get_t() < rotate3_end && lbm.get_t() > rotate3_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(-2.0f * rotate_step)));
+		if (lbm.get_t() < rotate3_end && lbm.get_t() > rotate3_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
+		if (lbm.get_t() < backrotate_end && lbm.get_t() > backrotate_start) wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(-rotate_step)));
 		if (lbm.graphics.next_frame(lbm_T, 55.0f)) { // render enough frames for 25 seconds of 60fps video
 			/*lbm.graphics.set_camera_centered(-33.0f, 23.3f, 100.0f, 1.05f);
 			lbm.graphics.slice_mode = 0;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_Q_CRITERION;
 			lbm.graphics.write_frame(get_exe_path() + "export/si_air_crit15/", "f" + to_string(fidx)); // export image from camera position 1 */
-			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.45f);
+			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.65f);
 			lbm.graphics.slice_mode = 1;
 			lbm.graphics.slice_x = lbm.center().x;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_FIELD;
