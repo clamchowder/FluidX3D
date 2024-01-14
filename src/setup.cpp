@@ -685,11 +685,12 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 void main_setup() { // MiG 15; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
-	const uint3 lbm_N = resolution(float3(1.0f, 2.8f, 1.0f), 2600u); // for dcs r-77
+	const uint3 lbm_N = resolution(float3(1.0f, 2.8f, 1.0f), 1700u); // for dcs r-77
 	// const uint3 lbm_N = resolution(float3(1.7f, 10.0f, 1.7f), 13560u); // input: simulation box aspect ratio and VRAM occupation in MB, output: grid resolution
 	const float lbm_Re = 1000000.0f;
 	const float lbm_u = 0.1f;
-	const float si_u = 274.4f; // 0.83 mach in m/s
+	//const float si_u = 274.4f; // 0.83 mach in m/s
+	const float si_u = 77.16; // 140 kts
 	const float si_nu = 1.46e-5; // m2/s kinematic viscocity of air at 0C
 	const float si_length = 2.74; // meters
 	const float si_rho = 0.7364; // air density in kg/m3 at 5000 m (~16,000 ft)
@@ -697,16 +698,15 @@ void main_setup() { // MiG 15; required extensions in defines.hpp: FP16S, EQUILI
 	LBM lbm(lbm_N, units.nu(si_nu));
 	// ###################################################################################### define geometry ######################################################################################
 	// const float size = 4.75f*lbm.size().x; // for r-77
-	const float size = 1.0f * lbm.size().x;
 	//const float3 center = float3(lbm.center().x, 0.35f * lbm.center().y, lbm.center().z);
 	//const float3x3 rotation = float3x3(float3(0, 1, 0), radians(45.0f)) * float3x3(float3(0, 0, 1), radians(-90.0f)); // for dcs
 	const float3x3 rotation = float3x3(float3(0, 0, 1), radians(90.0f));// *float3x3(float3(0, 1, 0), radians(30.0f));
 
-	Mesh* wing = read_stl(get_exe_path() + "../stl/airliner_wings.stl");
-	wing->scale(0.15f * (lbm.size().z / wing->get_bounding_box_size().z));
+	Mesh* wing = read_stl(get_exe_path() + "../stl/supersonic_wing.stl");
+	wing->scale(0.35f * (lbm.size().y / wing->get_bounding_box_size().y));
 	wing->rotate(rotation);
 	wing->set_center(wing->get_bounding_box_center());
-	wing->translate(float3(lbm.center().x, 0.5f * lbm.center().y, lbm.center().z) - wing->get_bounding_box_center());
+	wing->translate(float3(lbm.center().x, 0.6f * lbm.center().y, lbm.center().z) - wing->get_bounding_box_center());
 	//lbm.voxelize_stl(get_exe_path()+"../stl/ultralight_wing.stl", center, rotation, size); // https://www.thingiverse.com/thing:1176931/files
 	const uint Nx = lbm.get_Nx(), Ny = lbm.get_Ny(), Nz = lbm.get_Nz(); for (ulong n = 0ull; n < lbm.get_N(); n++) {
 		uint x = 0u, y = 0u, z = 0u; lbm.coordinates(n, x, y, z);
@@ -714,17 +714,23 @@ void main_setup() { // MiG 15; required extensions in defines.hpp: FP16S, EQUILI
 		if (x == 0u || x == Nx - 1u || y == 0u || y == Ny - 1u || z == 0u || z == Nz - 1u) lbm.flags[n] = TYPE_E; // all non periodic
 	} // ######################################################################### run simulation, export images and data ##########################################################################
 #if defined(GRAPHICS) && !defined(INTERACTIVE_GRAPHICS)
-	const uint lbm_T = 70000u;
-	const uint rotate_duration = 10000;
-	const uint rotate_start = 15000, rotate_until = 40000u;
+	const uint lbm_T = 140000u;
+
+	uint rotate_starts[] = { 20000, 55000, 95000, 125000 };
+	uint rotate_durations[] = { 500, 500, 500, 500 };
+	float rotate_amounts[] = { -5.0f, -5.0f, -5.0f, -5.0f };
 	lbm.run(0u);
 	int fidx = 0;
-	float rotate_step = -10.0f / rotate_duration;
 	lbm.voxelize_mesh_on_device(wing, TYPE_S, wing->get_center());
 	while (lbm.get_t() < lbm_T) { // main simulation loop
-		int revoxelize = 0;
-		if (lbm.get_t() < rotate_until && lbm.get_t() > rotate_start) { wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step))); revoxelize = 1; }
-		if (revoxelize) lbm.voxelize_mesh_on_device(wing, TYPE_S, wing->get_center());
+		for (int r_idx = 0; r_idx < 4; r_idx++) {
+			if ((lbm.get_t() > rotate_starts[r_idx]) && (lbm.get_t() < (rotate_starts[r_idx] + rotate_durations[r_idx]))) {
+				float rotate_step = rotate_amounts[r_idx] / rotate_durations[r_idx];
+				wing->rotate(float3x3(float3(1.0f, .0f, 0.0f), radians(rotate_step)));
+				lbm.voxelize_mesh_on_device(wing, TYPE_S, wing->get_center());
+			}
+		}
+
 		if (lbm.graphics.next_frame(lbm_T, 55.0f)) { // render enough frames for 25 seconds of 60fps video
 			/*lbm.graphics.set_camera_centered(-33.0f, 23.3f, 100.0f, 1.05f);
 			lbm.graphics.slice_mode = 0;
@@ -732,11 +738,11 @@ void main_setup() { // MiG 15; required extensions in defines.hpp: FP16S, EQUILI
 			lbm.graphics.write_frame(get_exe_path() + "export/si_air_crit15/", "f" + to_string(fidx)); // export image from camera position 1 */
 			lbm.graphics.set_camera_centered(1.0f, 0.0f, 100.0f, 1.65f);
 			lbm.graphics.slice_mode = 1;
-			lbm.graphics.slice_x = lbm.center().x * 1.4f;
+			lbm.graphics.slice_x = lbm.center().x;
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_FIELD;
-			lbm.graphics.write_frame(get_exe_path() + "export/airwing_varying_field/", "f" + to_string(fidx)); // export image from camera position 1
+			lbm.graphics.write_frame(get_exe_path() + "export/ss_slow_field/", "f" + to_string(fidx)); // export image from camera position 1
 			lbm.graphics.visualization_modes = VIS_FLAG_SURFACE | VIS_STREAMLINES;
-			lbm.graphics.write_frame(get_exe_path() + "export/airwing_varying_streamlines/", "f" + to_string(fidx));
+			lbm.graphics.write_frame(get_exe_path() + "export/ss_slow_streamlines/", "f" + to_string(fidx));
 			fidx++;
 		}
 		lbm.run(1u); // run 1 LBM time step
