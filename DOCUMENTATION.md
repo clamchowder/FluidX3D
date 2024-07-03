@@ -1,19 +1,127 @@
 # FluidX3D Documentation - How to get started?
 
+## 0. Intstall GPU Drivers and OpenCL Runtime
 
+<details><summary>(click to expand section)</summary>
 
-## 1. Download
-[Download](https://github.com/ProjectPhysX/FluidX3D/archive/refs/heads/master.zip) and unzip the source code, or clone with:
-```bash
-git clone https://github.com/ProjectPhysX/FluidX3D.git
-```
+- **Windows**
+  <details><summary>GPUs</summary>
+
+  - Download and install the [AMD](https://www.amd.com/en/support/download/drivers.html)/[Intel](https://www.intel.com/content/www/us/en/download/785597/intel-arc-iris-xe-graphics-windows.html)/[Nvidia](https://www.nvidia.com/Download/index.aspx) GPU Drivers, which contain the OpenCL Runtime.
+  - Reboot.
+
+  </details>
+  <details><summary>CPUs</summary>
+
+  - Download and install the [Intel CPU Runtime for OpenCL](https://www.intel.com/content/www/us/en/developer/articles/technical/intel-cpu-runtime-for-opencl-applications-with-sycl-support.html) (works for both AMD/Intel CPUs).
+  - Reboot.
+
+  </details>
+- **Linux**
+  <details><summary>AMD GPUs</summary>
+
+  - Download and install [AMD GPU Drivers](https://www.amd.com/en/support/linux-drivers), which contain the OpenCL Runtime, with:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y g++ git make ocl-icd-libopencl1 ocl-icd-opencl-dev
+    mkdir -p ~/amdgpu
+    wget -P ~/amdgpu https://repo.radeon.com/amdgpu-install/6.1.3/ubuntu/jammy/amdgpu-install_6.1.60103-1_all.deb
+    sudo apt install -y ~/amdgpu/amdgpu-install*.deb
+    sudo amdgpu-install -y --usecase=graphics,rocm,opencl --opencl=rocr
+    sudo usermod -a -G render,video $(whoami)
+    rm -r ~/amdgpu
+    sudo shutdown -r now
+    ```
+
+  </details>
+  <details><summary>Intel GPUs</summary>
+
+  - Intel GPU Drivers come already installed since Linux Kernel 6.2, but they don't contain the OpenCL Runtime.
+  - The the [OpenCL Runtime](https://github.com/intel/compute-runtime/releases) has to be installed separately with:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y g++ git make ocl-icd-libopencl1 ocl-icd-opencl-dev intel-opencl-icd
+    sudo usermod -a -G render $(whoami)
+    sudo shutdown -r now
+    ```
+
+  </details>
+  <details><summary>Nvidia GPUs</summary>
+
+  - Download and install [Nvidia GPU Drivers](https://www.nvidia.com/Download/index.aspx), which contain the OpenCL Runtime, with:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y g++ git make ocl-icd-libopencl1 ocl-icd-opencl-dev nvidia-driver-550
+    sudo shutdown -r now
+    ```
+
+  </details>
+  <details><summary>CPUs</summary>
+
+  - Option 1: Download and install the [oneAPI DPC++ Compiler](https://github.com/intel/llvm/releases?q=oneAPI+DPC%2B%2B+Compiler) and [oneTBB](https://github.com/oneapi-src/oneTBB/releases) with:
+    ```bash
+    export OCLCPUEXP_VERSION="2024.18.6.0.02_rel"
+    export ONEAPI_TBB_VERSION="2021.13.0"
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y g++ git make ocl-icd-libopencl1 ocl-icd-opencl-dev
+    sudo mkdir -p ~/cpuruntime /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION} /etc/OpenCL/vendors /etc/ld.so.conf.d
+    sudo wget -P ~/cpuruntime https://github.com/intel/llvm/releases/download/2024-WW25/oclcpuexp-${OCLCPUEXP_VERSION}.tar.gz
+    sudo wget -P ~/cpuruntime https://github.com/oneapi-src/oneTBB/releases/download/v${ONEAPI_TBB_VERSION}/oneapi-tbb-${ONEAPI_TBB_VERSION}-lin.tgz
+    sudo tar -zxvf ~/cpuruntime/oclcpuexp-${OCLCPUEXP_VERSION}.tar.gz -C /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION}
+    sudo tar -zxvf ~/cpuruntime/oneapi-tbb-${ONEAPI_TBB_VERSION}-lin.tgz -C /opt/intel
+    echo /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION}/x64/libintelocl.so | sudo tee /etc/OpenCL/vendors/intel_expcpu.icd
+    echo /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION}/x64 | sudo tee /etc/ld.so.conf.d/libintelopenclexp.conf
+    sudo ln -sf /opt/intel/oneapi-tbb-${ONEAPI_TBB_VERSION}/lib/intel64/gcc4.8/libtbb.so /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION}/x64
+    sudo ln -sf /opt/intel/oneapi-tbb-${ONEAPI_TBB_VERSION}/lib/intel64/gcc4.8/libtbbmalloc.so /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION}/x64
+    sudo ln -sf /opt/intel/oneapi-tbb-${ONEAPI_TBB_VERSION}/lib/intel64/gcc4.8/libtbb.so.12 /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION}/x64
+    sudo ln -sf /opt/intel/oneapi-tbb-${ONEAPI_TBB_VERSION}/lib/intel64/gcc4.8/libtbbmalloc.so.2 /opt/intel/oclcpuexp_${OCLCPUEXP_VERSION}/x64
+    sudo ldconfig -f /etc/ld.so.conf.d/libintelopenclexp.conf
+    sudo rm -r ~/cpuruntime
+    ```
+  - Option 2: Download and install [PoCL](https://portablecl.org/) with:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    sudo apt install -y g++ git make ocl-icd-libopencl1 ocl-icd-opencl-dev pocl-opencl-icd
+    ```
+  </details>
+
+- **Android**
+  <details><summary>ARM GPUs</summary>
+
+  - Download the [Termux `.apk`](https://github.com/termux/termux-app/releases) and install it.
+  - In the Termux app, run:
+    ```bash
+    apt update
+    apt upgrade -y
+    apt install -y clang git make
+    ```
+
+  </details>
+
+</details>
+
+<br>
+
+## 1. Download FluidX3D
+- [Download](https://github.com/ProjectPhysX/FluidX3D/archive/refs/heads/master.zip) and unzip the source code, or clone with:
+  ```bash
+  git clone https://github.com/ProjectPhysX/FluidX3D.git && cd FluidX3D
+  ```
+- To update FluidX3D:
+  - Make a backup of your changes.
+  - Run:
+    ```bash
+    git stash
+    git pull origin master
+    git stash pop
+    ```
 
 <br>
 
 ## 2. Compiling the Source Code
-- There is no "installation" of the FluidX3D software. Instead, you have to compile the source code yourself.
-- I have made this as easy as possible and this documentation will guide you through it. Nontheless, some basic programming experience with C++ would be good, as all the setup scripts are written in C++.
-- First, compile the code as-is; this is the standard FP32 benchmark test case. By default, the fastest installed GPU will be selected automatically. Compile time is about 10 seconds.
+- There is no "installation" of FluidX3D. Instead, you have to compile the source code yourself.
+- I have made this as easy as possible and this documentation will guide you through it. Nontheless, some basic programming experience with C++ would be good for the setup scripts.
+- First, compile the code as-is; this is the standard FP32 benchmark test case. By default, the fastest installed GPU will be selected automatically. Compile time is about 5 seconds.
 
 ### Windows
 - Download and install [Visual Studio Community](https://visualstudio.microsoft.com/de/vs/community/). In Visual Studio Installer, add:
@@ -24,38 +132,27 @@ git clone https://github.com/ProjectPhysX/FluidX3D.git
 - Compile and run by clicking the <kbd>► Local Windows Debugger</kbd> button.
 - To select a specific GPU, open Windows CMD in the `FluidX3D` folder (type `cmd` in File Explorer in the directory field and press <kbd>Enter</kbd>), then run `bin\FluidX3D.exe 0` to select device `0`. You can also select multiple GPUs with `bin\FluidX3D.exe 0 1 3 6` if the setup is [configured as multi-GPU](#the-lbm-class).
 
-### Linux
+### Linux / macOS / Android
 - Compile and run with:
   ```bash
   chmod +x make.sh
   ./make.sh
   ```
-- Compiling requires `C++17`, which is supported since `g++` version `8`. Check with `g++ --version`.
-- If you use [`INTERACTIVE_GRAPHICS`](src/defines.hpp), change to the "[compile on Linux with X11](make.sh#L6)" command in [`make.sh`](make.sh#L6).
+- Compiling requires [`g++`](https://gcc.gnu.org/) with `C++17`, which is supported since version `8` (check with `g++ --version`). If you have [`make`](https://www.gnu.org/software/make/) installed (check with `make --version`), compiling will will be faster using multiple CPU cores; otherwise compiling falls back to using a single CPU core.
 - To select a specific GPU, enter `./make.sh 0` to compile+run, or `bin/FluidX3D 0` to run on device `0`. You can also select multiple GPUs with `bin/FluidX3D 0 1 3 6` if the setup is [configured as multi-GPU](#the-lbm-class).
-
-### macOS
-- Select the "[compile on macOS](make.sh#L9)" command in [`make.sh`](make.sh#L9).
-- Compile and run with:
-  ```bash
-  chmod +x make.sh
-  ./make.sh
-  ```
-
-### Android
-- Select the "[compile on Android](make.sh#L10)" command in [`make.sh`](make.sh#L10).
-- Compile and run with:
-  ```bash
-  chmod +x make.sh
-  ./make.sh
-  ```
+- Operating system (Linux/macOS/Android) and X11 support (required for [`INTERACTIVE_GRAPHICS`](src/defines.hpp)) are detected automatically. In case problems arise, you can still manually select [`target=...`](make.sh#L13) in [`make.sh`](make.sh#L13).
+- On macOS and Android, [`INTERACTIVE_GRAPHICS`](src/defines.hpp) mode is not supported, as no X11 is available. You can still use [`INTERACTIVE_GRAPHICS_ASCII`](src/defines.hpp) though, or [render video](#video-rendering) to the hard drive with regular [`GRAPHICS`](src/defines.hpp) mode.
 
 <br>
 
 ## 3. Go through Sample Setups
 - Now open [`src/setup.cpp`](src/setup.cpp). In here are all the sample setups, each one being a `void main_setup() {...}` function block written in C++. Uncomment one of them, maybe start top-to-bottom.
-- In the line where the `main_setup()` function starts, it says "required extensions in defines.hpp:", followed by a list of extensions in capital letters. Head over to [`src/defines.hpp`](src/defines.hpp) and comment `//#define BENCHMARK` with a `//`. Then, uncomment all of the extensions required for the setup by removing the `//` in front of the corresponding line.
-- Finally, [compile](#2-compiling-the-source-code) and run the setup with the <kbd>► Local Windows Debugger</kbd> button (Windows) or `./make.sh` (Linux/macOS).
+- In the line where the `main_setup()` function starts, it says "required extensions in defines.hpp:", followed by a list of extensions in capital letters. Head over to [`src/defines.hpp`](src/defines.hpp) and comment out
+  ```c
+  //#define BENCHMARK
+  ```
+  with a `//`. Then, uncomment all of the extensions required for the setup by removing the `//` in front of the corresponding line.
+- Finally, [compile](#2-compiling-the-source-code) and run the setup with the <kbd>► Local Windows Debugger</kbd> button (Windows) or `./make.sh` (Linux/macOS/Android).
 - Once the interactive graphics window opens, press key <kbd>P</kbd> to start/pause the simulation, and press <kbd>H</kbd> to show the help menu for keyboard controls and visualization settings.
 - Go through some of the sample setups this way, get familiar with their code structure and test the graphics mode.
 
@@ -89,6 +186,7 @@ git clone https://github.com/ProjectPhysX/FluidX3D.git
 | <kbd>6</kbd>              | raytraced free surface                                                                                                             |
 | <kbd>7</kbd>              | particles                                                                                                                          |
 | <kbd>T</kbd>              | toggle slice visualization mode                                                                                                    |
+| <kbd>Z</kbd>              | toggle field visualization mode                                                                                                    |
 | <kbd>Q</kbd> <kbd>E</kbd> | move slice in slice visualization mode                                                                                             |
 
 <br>
@@ -111,7 +209,10 @@ git clone https://github.com/ProjectPhysX/FluidX3D.git
   ```c
   const uint3 lbm_N = resolution(float3(1.0f, 2.0f, 0.5f), 2000u);
   ```
-  This takes as inputs the desired aspect ratio of the simulation box and the VRAM occupation in MB, and returns the grid resolution as a `uint3` with `.x`/`.y`/`.z` components. You can also directly feed the `uint3` into the LBM constructor as resolution: `LBM lbm(lbm_N, nu, ...);`
+  This takes as inputs the desired aspect ratio of the simulation box and the VRAM occupation in MB, and returns the grid resolution as a `uint3` with `.x`/`.y`/`.z` components. You can also directly feed the `uint3` into the LBM constructor as resolution:
+  ```c
+  LBM lbm(lbm_N, nu, ...);
+  ```
 
 ### Unit Conversion
 - The LBM simulation uses a different unit system from SI units, where density `rho=1` and velocity `u≈0.001-0.1`, because floating-point arithmetic is most accurate close to `1`.
@@ -205,9 +306,9 @@ git clone https://github.com/ProjectPhysX/FluidX3D.git
   while(lbm.get_t()<lbm_T) { // main simulation loop
   	if(lbm.graphics.next_frame(lbm_T, 25.0f)) { // render enough frames for 25 seconds of 60fps video
   		lbm.graphics.set_camera_free(float3(2.5f*(float)Nx, 0.0f*(float)Ny, 0.0f*(float)Nz), 0.0f, 0.0f, 50.0f); // set camera to position 1
-  		lbm.graphics.write_frame(get_exe_path()+"export/camera_angle_1/"); // export image from camera position 1
+  		lbm.graphics.write_frame(get_exe_path()+"export/camera_1/"); // export image from camera position 1
   		lbm.graphics.set_camera_centered(-40.0f, 20.0f, 78.0f, 1.25f); // set camera to position 2
-  		lbm.graphics.write_frame(get_exe_path()+"export/camera_angle_2/"); // export image from camera position 2
+  		lbm.graphics.write_frame(get_exe_path()+"export/camera_2/"); // export image from camera position 2
   	}
   	lbm.run(1u); // run 1 LBM time step
   }
@@ -217,20 +318,22 @@ git clone https://github.com/ProjectPhysX/FluidX3D.git
 - Exported frames will automatically be assigned the current simulation time step in their name, in the format `bin/export/image-123456789.png`.
 - To convert the rendered `.png` images to video, use [FFmpeg](https://ffmpeg.org/):
   ```bash
-  ffmpeg -framerate 60 -pattern_type glob -i "./bin/export/*/image-*.png" -c:v libx264 -pix_fmt yuv420p -b:v 24M "video.mp4"
+  ffmpeg -framerate 60 -pattern_type glob -i "export/*/image-*.png" -c:v libx264 -pix_fmt yuv420p -b:v 24M "video.mp4"
   ```
 
 ### Data Export
 - At any point in time, you can export volumetric data as binary `.vtk` files with:
   ```c
-  lbm.rho.write_device_to_vtk();
-  lbm.u.write_device_to_vtk();
-  lbm.flags.write_device_to_vtk();
-  lbm.phi.write_device_to_vtk(); // only for SURFACE extension
-  lbm.T.write_device_to_vtk(); // only for TEMPERATURE extension
+  lbm.rho.write_device_to_vtk(); // density
+  lbm.u.write_device_to_vtk(); // velocity
+  lbm.flags.write_device_to_vtk(); // flags
+  lbm.F.write_device_to_vtk(); // force, only for FORCE_FIELD extension
+  lbm.phi.write_device_to_vtk(); // fill fraction, only for SURFACE extension
+  lbm.T.write_device_to_vtk(); // temperature, only for TEMPERATURE extension
   lbm.write_mesh_to_vtk(const Mesh* mesh); // for exporting triangle meshes
   ```
 - These functions first pull the data from the GPU(s) into CPU RAM, and then write it to the hard drive.
+- If [unit conversion](#unit-conversion) with `units.set_m_kg_s(...)` was specified, the data in exported `.vtk` files is automaticlally converted to SI units.
 - Exported files will automatically be assigned the current simulation time step in their name, in the format `bin/export/u-123456789.vtk`.
 - Be aware that these volumetric files can be gigantic in file size, tens of GigaByte for a single file.
 - You can view/evaluate the `.vtk` files for example in [ParaView](https://www.paraview.org/).
@@ -346,7 +449,7 @@ By now you're already familiar with the [additional boundary types](#initial-and
 - Sometimes in the velocity field or streamlines visualization, you will see fuzzyness, or something that looks like a rapidly growing white crystal, blowing up from a certain point and filling the entire simulation box. This is instability, i.e. when velocities turn `NaN` or `Inf`.
 - Often times, the cause of instability is an unfortunate choice of unsuitable parameters:
   - too high/low density `rho` (ideally should be very close to `1` at all times)
-  - too high velocity `u` (must never exceed `0.57` anywhere in the box, ideally should be somewhere around `0.1`, but can be as small as `0.001`)
+  - too high velocity `u` (must never exceed `0.57` anywhere in the box, ideally should be somewhere around `0.075`, but can be as small as `0.001`)
   - too low kinematic shear viscosity `nu` (ideally close to `1/6`, becomes unstable when it's very very close to `0` (then enable the [`SUBGRID`](src/defines.hpp) extension), and should not exceed `3`)
   - too high force per volume (`fx`|`fy`|`fz`) (should not exceed `0.001` in magnitude)
   - too high surface tension coefficient `sigma` (should not exceed `0.1`)
