@@ -10,8 +10,8 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 		//LBM lbm( 32u,  32u,  32u, 1.0f);
 		//LBM lbm( 64u,  64u,  64u, 1.0f);
-		//LBM lbm(128u, 128u, 128u, 1.0f);
-		LBM lbm(256u, 256u, 256u, 1.0f); // default
+		LBM lbm(128u, 128u, 128u, 1.0f);
+		//LBM lbm(256u, 256u, 256u, 1.0f); // default
 		//LBM lbm(384u, 384u, 384u, 1.0f);
 		//LBM lbm(512u, 512u, 512u, 1.0f);
 
@@ -23,12 +23,12 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 		//LBM lbm(2u*lbm_N.x, 2u*lbm_N.y, 2u*lbm_N.z, 2u, 2u, 2u, 1.0f); // 8 GPUs
 
 		// #########################################################################################################################################################################################
-		for(uint i=0u; i<1000u; i++) {
+		for(uint i=0u; i<10u; i++) {
 			lbm.run(10u);
-			mlups = max(mlups, to_uint((double)lbm.get_N()*1E-6/info.runtime_lbm_timestep_smooth));
+			mlups = max(mlups, to_uint((double)lbm.get_N()*1E-3/info.runtime_lbm_timestep_smooth));
 		}
 	} // make lbm object go out of scope to free its memory
-	print_info("Peak MLUPs/s = "+to_string(mlups));
+	print_info("Peak KLUPs/s = "+to_string(mlups));
 #if defined(_WIN32)
 	wait();
 #endif // Windows

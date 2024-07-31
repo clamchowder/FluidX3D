@@ -95,7 +95,7 @@ struct Device_Info {
 	uint clock_frequency=0u; // in MHz
 	bool is_cpu=false, is_gpu=false;
 	bool intel_gpu_above_4gb_patch = false; // memory allocations greater than 4GB need to be specifically enabled on Intel GPUs
-	bool legacy_gpu_fma_patch = false; // some old GPUs have terrible fma performance, so replace with a*b+c
+	bool legacy_gpu_fma_patch = true; // some old GPUs have terrible fma performance, so replace with a*b+c
 	uint is_fp64_capable=0u, is_fp32_capable=0u, is_fp16_capable=0u, is_int64_capable=0u, is_int32_capable=0u, is_int16_capable=0u, is_int8_capable=0u;
 	uint cores=0u; // for CPUs, compute_units is the number of threads (twice the number of cores with hyperthreading)
 	float tflops=0.0f; // estimated device FP32 floating point performance in TeraFLOPs/s
