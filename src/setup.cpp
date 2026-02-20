@@ -145,7 +145,7 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 
 
-/*void main_setup() { // Stokes drag validation; required extensions in defines.hpp: FORCE_FIELD, EQUILIBRIUM_BOUNDARIES
+void main_setup() { // Stokes drag validation; required extensions in defines.hpp: FORCE_FIELD, EQUILIBRIUM_BOUNDARIES
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
 	const ulong dt = 100ull; // check error every dt time steps
 	const float R = 32.0f; // sphere radius
