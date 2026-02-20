@@ -30,7 +30,7 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 	} // make lbm object go out of scope to free its memory
 	print_info("Peak MLUPs/s = "+to_string(mlups));
 #if defined(_WIN32)
-	wait();
+	//wait();
 #endif // Windows
 } /**/
 #endif // BENCHMARK
@@ -145,7 +145,7 @@ void main_setup() { // benchmark; required extensions in defines.hpp: BENCHMARK,
 
 
 
-void main_setup() { // Stokes drag validation; required extensions in defines.hpp: FORCE_FIELD, EQUILIBRIUM_BOUNDARIES
+/*void main_setup() { // Stokes drag validation; required extensions in defines.hpp: FORCE_FIELD, EQUILIBRIUM_BOUNDARIES
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
 	const ulong dt = 100ull; // check error every dt time steps
 	const float R = 32.0f; // sphere radius
@@ -292,7 +292,7 @@ void main_setup() { // Stokes drag validation; required extensions in defines.hp
 
 
 
-/*void main_setup() { // delta wing; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
+void main_setup() { // delta wing; required extensions in defines.hpp: FP16S, EQUILIBRIUM_BOUNDARIES, SUBGRID, INTERACTIVE_GRAPHICS
 	// ################################################################## define simulation box size, viscosity and volume force ###################################################################
 	const uint L = 128u;
 	const float Re = 100000.0f;
@@ -308,8 +308,10 @@ void main_setup() { // Stokes drag validation; required extensions in defines.hp
 		else lbm.u.y[n] = u;
 		if(x==0u||x==Nx-1u||y==0u||y==Ny-1u||z==0u||z==Nz-1u) lbm.flags[n] = TYPE_E; // all non periodic
 	}); // ####################################################################### run simulation, export images and data ##########################################################################
-	lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
-	lbm.run();
+	//lbm.graphics.visualization_modes = VIS_FLAG_SURFACE|VIS_Q_CRITERION;
+	for (uint i = 0u; i < 1000u; i++) {
+		lbm.run(10u, 1000u * 10u);
+	}
 } /**/
 
 
